@@ -1,0 +1,5 @@
+.*
+*.o
+/hscc
+/tmp*
+!.gitignore
