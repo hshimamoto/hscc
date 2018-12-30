@@ -271,6 +271,7 @@ int main(int argc, char **argv)
 	puts(".intel_syntax noprefix");
 	puts(".global main");
 	puts("main:");
+	puts("  push rbp");
 	puts("  mov rbp, rsp");
 	puts("  sub rsp, 240"); // 30 * 8
 
@@ -285,6 +286,7 @@ int main(int argc, char **argv)
 		puts("  pop rax");
 	}
 	puts("  mov rsp, rbp");
+	puts("  pop rbp");
 	puts("  ret");
 
 	return 0;
