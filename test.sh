@@ -4,6 +4,11 @@ try() {
 	in="$1"
 	ex="$2"
 	./hscc "$in" > tmp.s
+	if [ $? -ne 0 ]; then
+		echo "compile error"
+		exit 1
+	fi
+	rm -f tmp
 	gcc -o tmp tmp.s
 	./tmp
 	ret="$?"
@@ -23,5 +28,7 @@ try 1+2-3 0
 try 1+2+3+4+5+6+7+8+9+10 55
 try '1+2+3+4+5+6+7+8+9 + 10' 55
 try '1   +2   -       3' 0
+try '2*3' 6
+try '4/2' 2
 
 echo OK

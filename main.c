@@ -29,6 +29,12 @@ void tokenize(char *p)
 			p++;
 			continue;
 		}
+		if (*p == '*' || *p == '/') {
+			tokens[i].type = *p;
+			i++;
+			p++;
+			continue;
+		}
 		if (isdigit(*p)) {
 			tokens[i].type = TK_NUM;
 			tokens[i].val = strtol(p, &p, 0);
@@ -66,7 +72,8 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
 }
 
 /*
- * expr: num | num "+" expr | num "-" expr
+ * expr: mul | mul "+" expr | mul "-" expr
+ * mul: num | num "*" mul | num "/" mul
  */
 Node *num()
 {
@@ -80,9 +87,24 @@ Node *num()
 	exit(1);
 }
 
-Node *expr()
+Node *mul()
 {
 	Node *lhs = num();
+
+	if (tokens[pos].type == '*') {
+		pos++;
+		return new_node('*', lhs, mul(), 0);
+	}
+	if (tokens[pos].type == '/') {
+		pos++;
+		return new_node('/', lhs, mul(), 0);
+	}
+	return lhs;
+}
+
+Node *expr()
+{
+	Node *lhs = mul();
 
 	if (tokens[pos].type == '+') {
 		pos++;
@@ -97,26 +119,29 @@ Node *expr()
 
 void gen(Node *node)
 {
-	if (node->type == '+') {
-		gen(node->lhs);
-		gen(node->rhs);
-		puts("  pop rdx");
-		puts("  pop rax");
-		puts("  add rax, rdx");
-		puts("  push rax");
-	} else if (node->type == '-') {
-		gen(node->lhs);
-		gen(node->rhs);
-		puts("  pop rdx");
-		puts("  pop rax");
-		puts("  sub rax, rdx");
-		puts("  push rax");
-	} else if (node->type == ND_NUM) {
+	if (node->type == ND_NUM) {
 		printf("  push %d\n", node->val);
+		return;
+	}
+
+	gen(node->lhs);
+	gen(node->rhs);
+	puts("  pop rdi");
+	puts("  pop rax");
+	if (node->type == '+') {
+		puts("  add rax, rdi");
+	} else if (node->type == '-') {
+		puts("  sub rax, rdi");
+	} else if (node->type == '*') {
+		puts("  mul rdi");
+	} else if (node->type == '/') {
+		puts("  xor edx, edx");
+		puts("  div rdi");
 	} else {
 		fprintf(stderr, "error node->type = %d\n", node->type);
 		exit(1);
 	}
+	puts("  push rax");
 }
 
 int main(int argc, char **argv)
