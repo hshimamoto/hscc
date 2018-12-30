@@ -23,19 +23,9 @@ void tokenize(char *p)
 			p++;
 			continue;
 		}
-		if (*p == '+' || *p == '-') {
-			tokens[i].type = *p;
-			i++;
-			p++;
-			continue;
-		}
-		if (*p == '*' || *p == '/') {
-			tokens[i].type = *p;
-			i++;
-			p++;
-			continue;
-		}
-		if (*p == '(' || *p == ')') {
+		if (*p == '+' || *p == '-' ||
+		    *p == '*' || *p == '/' ||
+		    *p == '(' || *p == ')') {
 			tokens[i].type = *p;
 			i++;
 			p++;
