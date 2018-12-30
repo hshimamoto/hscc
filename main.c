@@ -24,21 +24,24 @@ int main(int argc, char **argv)
 	}
 
 	printf("  mov rax, %d\n", n);
-	if (*endp != '\0') {
-		p = endp;
-		if (*p != '+' && *p != '-') {
-			fprintf(stderr, "syntax error\n");
-			return 1;
-		}
-		n = strtol(p + 1, &endp, 0);
-		if (p + 1 == endp) {
-			fprintf(stderr, "syntax error\n");
-			return 1;
-		}
+	p = endp;
+	while (*p) {
 		if (*p == '+')
-			printf("  add rax, %d\n", n);
-		else
-			printf("  sub rax, %d\n", n);
+			printf("  add");
+		else if (*p == '-')
+			printf("  sub");
+		else {
+			fprintf(stderr, "syntax error\n");
+			return 1;
+		}
+		p++;
+		n = strtol(p, &endp, 0);
+		if (p == endp) {
+			fprintf(stderr, "syntax error\n");
+			return 1;
+		}
+		printf(" rax, %d\n", n);
+		p = endp;
 	}
 	puts("  ret");
 
