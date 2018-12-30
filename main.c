@@ -4,6 +4,7 @@
 
 enum {
 	TK_NUM = 256,
+	TK_IDENT,
 	TK_EOF,
 };
 
@@ -25,8 +26,16 @@ void tokenize(char *p)
 		}
 		if (*p == '+' || *p == '-' ||
 		    *p == '*' || *p == '/' ||
-		    *p == '(' || *p == ')') {
+		    *p == '(' || *p == ')' ||
+		    *p == '=' || *p == ';') {
 			tokens[i].type = *p;
+			i++;
+			p++;
+			continue;
+		}
+		if (*p >= 'a' && *p <='z') {
+			tokens[i].type = TK_IDENT;
+			tokens[i].val = *p - 'a';
 			i++;
 			p++;
 			continue;
@@ -45,6 +54,7 @@ void tokenize(char *p)
 
 enum {
 	ND_NUM = 256,
+	ND_IDENT,
 };
 
 typedef struct node {
@@ -68,18 +78,27 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
 }
 
 /*
- * expr: mul | mul "+" expr | mul "-" expr
- * mul : term | term "*" mul | term "/" mul
- * term: num | "(" expr ")"
+ * prog   : assign prog2
+ * prog2  : e | prog
+ * assign : expr assign2 ";"
+ * assing2: e | "=" expr assign2
+ * expr   : mul | mul "+" expr | mul "-" expr
+ * mul    : term | term "*" mul | term "/" mul
+ * term   : num | ident | "(" expr ")"
  */
 Node *expr();
 
-Node *num()
+Node *num_or_ident()
 {
 	if (tokens[pos].type == TK_NUM) {
 		int val = tokens[pos].val;
 		pos++;
 		return new_node(ND_NUM, NULL, NULL, val);
+	}
+	if (tokens[pos].type == TK_IDENT) {
+		int val = tokens[pos].val;
+		pos++;
+		return new_node(ND_IDENT, NULL, NULL, val);
 	}
 	// syntax error
 	fprintf(stderr, "syntax error\n");
@@ -102,7 +121,7 @@ Node *term()
 		return e;
 	}
 
-	return num();
+	return num_or_ident();
 }
 
 Node *mul()
@@ -135,10 +154,88 @@ Node *expr()
 	return lhs;
 }
 
+Node *assign2()
+{
+	if (tokens[pos].type == ';') {
+		pos++;
+		return NULL;
+	}
+
+	if (tokens[pos].type == '=') {
+		pos++;
+		Node *lhs = expr();
+		Node *rhs = assign2();
+
+		if (rhs == NULL)
+			return lhs;
+
+		return new_node('=', lhs, rhs, 0);
+	}
+
+	// bad
+	fprintf(stderr, "no semicolumn\n");
+	exit(1);
+}
+
+Node *assign()
+{
+	Node *lhs = expr();
+	Node *rhs = assign2();
+
+	if (rhs == NULL)
+		return lhs;
+
+	return new_node('=', lhs, rhs, 0);
+}
+
+// code store
+Node *code[100];
+int cpos;
+
+void prog()
+{
+	code[cpos] = assign();
+	cpos++;
+	if (tokens[pos].type == TK_EOF)
+		return;
+	// next statement
+	return prog();
+}
+
+void gen_lval(Node *node)
+{
+	if (node->type == ND_IDENT) {
+		// rbp - N * 8
+		printf("  mov rax, rbp\n");
+		printf("  sub rax, %d\n", (node->val + 1) * 8);
+		printf("  push rax\n");
+		return;
+	}
+
+	fprintf(stderr, "not lval\n");
+	exit(1);
+}
+
 void gen(Node *node)
 {
 	if (node->type == ND_NUM) {
 		printf("  push %d\n", node->val);
+		return;
+	}
+	if (node->type == ND_IDENT) {
+		gen_lval(node);
+		puts("  pop rax");
+		puts("  mov rax, [rax]");
+		puts("  push rax");
+		return;
+	}
+	if (node->type == '=') {
+		gen_lval(node->lhs);
+		gen(node->rhs);
+		puts("  pop rdi");
+		puts("  pop rax");
+		puts("  mov [rax], rdi");
+		puts("  push rdi");
 		return;
 	}
 
@@ -174,13 +271,20 @@ int main(int argc, char **argv)
 	puts(".intel_syntax noprefix");
 	puts(".global main");
 	puts("main:");
+	puts("  mov rbp, rsp");
+	puts("  sub rsp, 240"); // 30 * 8
 
 	tokenize(p);
 
-	Node *node = expr();
+	prog();
 	// generate stack machine
-	gen(node);
-	puts("  pop rax");
+	int i;
+	for (i = 0; i < 100 && code[i]; i++) {
+		printf("# code[%d]\n", i);
+		gen(code[i]);
+		puts("  pop rax");
+	}
+	puts("  mov rsp, rbp");
 	puts("  ret");
 
 	return 0;
