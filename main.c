@@ -35,6 +35,12 @@ void tokenize(char *p)
 			p++;
 			continue;
 		}
+		if (*p == '(' || *p == ')') {
+			tokens[i].type = *p;
+			i++;
+			p++;
+			continue;
+		}
 		if (isdigit(*p)) {
 			tokens[i].type = TK_NUM;
 			tokens[i].val = strtol(p, &p, 0);
@@ -73,8 +79,11 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
 
 /*
  * expr: mul | mul "+" expr | mul "-" expr
- * mul: num | num "*" mul | num "/" mul
+ * mul : term | term "*" mul | term "/" mul
+ * term: num | "(" expr ")"
  */
+Node *expr();
+
 Node *num()
 {
 	if (tokens[pos].type == TK_NUM) {
@@ -87,9 +96,28 @@ Node *num()
 	exit(1);
 }
 
+Node *term()
+{
+	if (tokens[pos].type == '(') {
+		pos++;
+
+		Node *e = expr();
+
+		if (tokens[pos].type != ')') {
+			fprintf(stderr, "syntax error\n");
+			exit(1);
+		}
+		pos++;
+
+		return e;
+	}
+
+	return num();
+}
+
 Node *mul()
 {
-	Node *lhs = num();
+	Node *lhs = term();
 
 	if (tokens[pos].type == '*') {
 		pos++;
