@@ -41,6 +41,16 @@ typedef struct {
 
 Vector *tokens;
 
+void push_token(int type, int val)
+{
+	Token *t = malloc(sizeof(Token));
+
+	t->type = type;
+	t->val = val;
+
+	vec_push(tokens, t);
+}
+
 void tokenize(char *p)
 {
 	tokens = new_vector();
@@ -54,33 +64,25 @@ void tokenize(char *p)
 		    *p == '*' || *p == '/' ||
 		    *p == '(' || *p == ')' ||
 		    *p == '=' || *p == ';') {
-			Token *t = malloc(sizeof(Token));
-			t->type = *p;
-			vec_push(tokens, t);
+			push_token(*p, 0);
 			p++;
 			continue;
 		}
 		if (*p >= 'a' && *p <='z') {
-			Token *t = malloc(sizeof(Token));
-			t->type = TK_IDENT;
-			t->val = *p - 'a';
-			vec_push(tokens, t);
+			push_token(TK_IDENT, *p - 'a');
 			p++;
 			continue;
 		}
 		if (isdigit(*p)) {
-			Token *t = malloc(sizeof(Token));
-			t->type = TK_NUM;
-			t->val = strtol(p, &p, 0);
-			vec_push(tokens, t);
+			int val = strtol(p, &p, 0);
+
+			push_token(TK_NUM, val);
 			continue;
 		}
 		fprintf(stderr, "syntax error: %s\n", p);
 		exit(1);
 	}
-	Token *t = malloc(sizeof(Token));
-	t->type = TK_EOF;
-	vec_push(tokens, t);
+	push_token(TK_EOF, 0);
 }
 
 enum {
