@@ -51,6 +51,18 @@ void push_token(int type, int val)
 	vec_push(tokens, t);
 }
 
+int pos;
+
+Token *get_token(void)
+{
+	return tokens->data[pos++];
+}
+
+void unget_token(void)
+{
+	pos--;
+}
+
 void tokenize(char *p)
 {
 	tokens = new_vector();
@@ -96,8 +108,6 @@ typedef struct node {
 	int val;	// for ND_NUM;
 } Node;
 
-int pos; // position in tokens
-
 Node *new_node(int type, Node *lhs, Node *rhs, int val)
 {
 	Node *node = malloc(sizeof(Node));
@@ -123,16 +133,14 @@ Node *expr();
 
 Node *num_or_ident()
 {
-	Token *t = tokens->data[pos];
+	Token *t = get_token();
 
 	if (t->type == TK_NUM) {
 		int val = t->val;
-		pos++;
 		return new_node(ND_NUM, NULL, NULL, val);
 	}
 	if (t->type == TK_IDENT) {
 		int val = t->val;
-		pos++;
 		return new_node(ND_IDENT, NULL, NULL, val);
 	}
 	// syntax error
@@ -142,22 +150,21 @@ Node *num_or_ident()
 
 Node *term()
 {
-	Token *t = tokens->data[pos];
+	Token *t = get_token();
 
 	if (t->type == '(') {
-		pos++;
-
 		Node *e = expr();
 
-		t = tokens->data[pos];
+		t = get_token();
 		if (t->type != ')') {
 			fprintf(stderr, "syntax error\n");
 			exit(1);
 		}
-		pos++;
 
 		return e;
 	}
+
+	unget_token();
 
 	return num_or_ident();
 }
@@ -165,46 +172,42 @@ Node *term()
 Node *mul()
 {
 	Node *lhs = term();
-	Token *t = tokens->data[pos];
+	Token *t = get_token();
 
 	if (t->type == '*') {
-		pos++;
 		return new_node('*', lhs, mul(), 0);
 	}
 	if (t->type == '/') {
-		pos++;
 		return new_node('/', lhs, mul(), 0);
 	}
+	unget_token();
 	return lhs;
 }
 
 Node *expr()
 {
 	Node *lhs = mul();
-	Token *t = tokens->data[pos];
+	Token *t = get_token();
 
 	if (t->type == '+') {
-		pos++;
 		return new_node('+', lhs, expr(), 0);
 	}
 	if (t->type == '-') {
-		pos++;
 		return new_node('-', lhs, expr(), 0);
 	}
+	unget_token();
 	return lhs;
 }
 
 Node *assign2()
 {
-	Token *t = tokens->data[pos];
+	Token *t = get_token();
 
 	if (t->type == ';') {
-		pos++;
 		return NULL;
 	}
 
 	if (t->type == '=') {
-		pos++;
 		Node *lhs = expr();
 		Node *rhs = assign2();
 
@@ -236,10 +239,12 @@ Vector *code;
 void prog()
 {
 	vec_push(code, assign());
-	Token *t = tokens->data[pos];
+	Token *t = get_token();
 
 	if (t->type == TK_EOF)
 		return;
+
+	unget_token();
 	// next statement
 	return prog();
 }
