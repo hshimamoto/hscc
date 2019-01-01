@@ -1,6 +1,32 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <memory.h>
+
+typedef struct {
+	void **data;
+	int capa, len;
+} Vector;
+
+int BUFSZ = 32;
+
+Vector *new_vector()
+{
+	Vector *v = malloc(sizeof(Vector));
+	v->data = malloc(sizeof(void *) * BUFSZ);
+	v->capa = BUFSZ;
+	v->len = 0;
+	return v;
+}
+
+void vec_push(Vector *v, void *e)
+{
+	if (v->capa >= v->len) {
+		v->capa += BUFSZ;
+		v->data = realloc(v->data, sizeof(void *) * v->capa);
+	}
+	v->data[v->len++] = e;
+}
 
 enum {
 	TK_NUM = 256,
@@ -13,11 +39,11 @@ typedef struct {
 	int val;
 } Token;
 
-Token tokens[100];
+Vector *tokens;
 
 void tokenize(char *p)
 {
-	int i = 0; // index of tokens
+	tokens = new_vector();
 
 	while (*p) {
 		if (isspace(*p)) {
@@ -28,28 +54,33 @@ void tokenize(char *p)
 		    *p == '*' || *p == '/' ||
 		    *p == '(' || *p == ')' ||
 		    *p == '=' || *p == ';') {
-			tokens[i].type = *p;
-			i++;
+			Token *t = malloc(sizeof(Token));
+			t->type = *p;
+			vec_push(tokens, t);
 			p++;
 			continue;
 		}
 		if (*p >= 'a' && *p <='z') {
-			tokens[i].type = TK_IDENT;
-			tokens[i].val = *p - 'a';
-			i++;
+			Token *t = malloc(sizeof(Token));
+			t->type = TK_IDENT;
+			t->val = *p - 'a';
+			vec_push(tokens, t);
 			p++;
 			continue;
 		}
 		if (isdigit(*p)) {
-			tokens[i].type = TK_NUM;
-			tokens[i].val = strtol(p, &p, 0);
-			i++;
+			Token *t = malloc(sizeof(Token));
+			t->type = TK_NUM;
+			t->val = strtol(p, &p, 0);
+			vec_push(tokens, t);
 			continue;
 		}
 		fprintf(stderr, "syntax error: %s\n", p);
 		exit(1);
 	}
-	tokens[i].type = TK_EOF;
+	Token *t = malloc(sizeof(Token));
+	t->type = TK_EOF;
+	vec_push(tokens, t);
 }
 
 enum {
@@ -90,13 +121,15 @@ Node *expr();
 
 Node *num_or_ident()
 {
-	if (tokens[pos].type == TK_NUM) {
-		int val = tokens[pos].val;
+	Token *t = tokens->data[pos];
+
+	if (t->type == TK_NUM) {
+		int val = t->val;
 		pos++;
 		return new_node(ND_NUM, NULL, NULL, val);
 	}
-	if (tokens[pos].type == TK_IDENT) {
-		int val = tokens[pos].val;
+	if (t->type == TK_IDENT) {
+		int val = t->val;
 		pos++;
 		return new_node(ND_IDENT, NULL, NULL, val);
 	}
@@ -107,12 +140,15 @@ Node *num_or_ident()
 
 Node *term()
 {
-	if (tokens[pos].type == '(') {
+	Token *t = tokens->data[pos];
+
+	if (t->type == '(') {
 		pos++;
 
 		Node *e = expr();
 
-		if (tokens[pos].type != ')') {
+		t = tokens->data[pos];
+		if (t->type != ')') {
 			fprintf(stderr, "syntax error\n");
 			exit(1);
 		}
@@ -127,12 +163,13 @@ Node *term()
 Node *mul()
 {
 	Node *lhs = term();
+	Token *t = tokens->data[pos];
 
-	if (tokens[pos].type == '*') {
+	if (t->type == '*') {
 		pos++;
 		return new_node('*', lhs, mul(), 0);
 	}
-	if (tokens[pos].type == '/') {
+	if (t->type == '/') {
 		pos++;
 		return new_node('/', lhs, mul(), 0);
 	}
@@ -142,12 +179,13 @@ Node *mul()
 Node *expr()
 {
 	Node *lhs = mul();
+	Token *t = tokens->data[pos];
 
-	if (tokens[pos].type == '+') {
+	if (t->type == '+') {
 		pos++;
 		return new_node('+', lhs, expr(), 0);
 	}
-	if (tokens[pos].type == '-') {
+	if (t->type == '-') {
 		pos++;
 		return new_node('-', lhs, expr(), 0);
 	}
@@ -156,12 +194,14 @@ Node *expr()
 
 Node *assign2()
 {
-	if (tokens[pos].type == ';') {
+	Token *t = tokens->data[pos];
+
+	if (t->type == ';') {
 		pos++;
 		return NULL;
 	}
 
-	if (tokens[pos].type == '=') {
+	if (t->type == '=') {
 		pos++;
 		Node *lhs = expr();
 		Node *rhs = assign2();
@@ -189,14 +229,14 @@ Node *assign()
 }
 
 // code store
-Node *code[100];
-int cpos;
+Vector *code;
 
 void prog()
 {
-	code[cpos] = assign();
-	cpos++;
-	if (tokens[pos].type == TK_EOF)
+	vec_push(code, assign());
+	Token *t = tokens->data[pos];
+
+	if (t->type == TK_EOF)
 		return;
 	// next statement
 	return prog();
@@ -277,12 +317,13 @@ int main(int argc, char **argv)
 
 	tokenize(p);
 
+	code = new_vector();
 	prog();
 	// generate stack machine
 	int i;
-	for (i = 0; i < 100 && code[i]; i++) {
+	for (i = 0; i < code->len; i++) {
 		printf("# code[%d]\n", i);
-		gen(code[i]);
+		gen(code->data[i]);
 		puts("  pop rax");
 	}
 	puts("  mov rsp, rbp");
