@@ -3,7 +3,8 @@
 try() {
 	in="$1"
 	ex="$2"
-	./hscc "$in" > tmp.s
+	echo "$in" > tmp.c
+	./hscc tmp.c > tmp.s
 	if [ $? -ne 0 ]; then
 		echo "compile error"
 		exit 1

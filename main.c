@@ -302,11 +302,25 @@ void gen(Node *node)
 int main(int argc, char **argv)
 {
 	if (argc < 2) {
-		fprintf(stderr, "Usage: hscc <code>\n");
+		fprintf(stderr, "Usage: hscc <file>\n");
 		return 1;
 	}
 
-	char *p = argv[1];
+	FILE *fp = fopen(argv[1], "r");
+
+	if (!fp) {
+		fprintf(stderr, "fopen error: %s\n", argv[1]);
+		return 1;
+	}
+
+	fseek(fp, 0, SEEK_END);
+	long sz = ftell(fp);
+
+	char *p = malloc(sz + 1);
+
+	fseek(fp, 0, SEEK_SET);
+	fread(p, sz, 1, fp);
+	p[sz] = 0;
 
 	puts(".intel_syntax noprefix");
 	puts(".global main");
