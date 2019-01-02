@@ -35,5 +35,9 @@ try '(1+2)*3;' 9
 try '((1+2)*5+5)/2;' 10
 try 'a=1;b=2;a+b;' 3
 try 'a=b=c=d=1;a+b+c+d;' 4
+try '1==1;' 1
+try '1!=1;' 0
+try 'a=1;b=1;a+b == 2;' 1
+try 'a=1;b=2;a+b == 2;' 0
 
 echo OK

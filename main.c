@@ -31,6 +31,8 @@ void vec_push(Vector *v, void *e)
 enum {
 	TK_NUM = 256,
 	TK_IDENT,
+	TK_EQ,		// ==
+	TK_NE,		// !=
 	TK_EOF,
 };
 
@@ -72,6 +74,16 @@ void tokenize(char *p)
 			p++;
 			continue;
 		}
+		if (*p == '=' && *(p + 1) == '=') {
+			push_token(TK_EQ, 0);
+			p += 2;
+			continue;
+		}
+		if (*p == '!' && *(p + 1) == '=') {
+			push_token(TK_NE, 0);
+			p += 2;
+			continue;
+		}
 		if (*p == '+' || *p == '-' ||
 		    *p == '*' || *p == '/' ||
 		    *p == '(' || *p == ')' ||
@@ -100,6 +112,8 @@ void tokenize(char *p)
 enum {
 	ND_NUM = 256,
 	ND_IDENT,
+	ND_EQ,
+	ND_NE,
 };
 
 typedef struct node {
@@ -125,7 +139,8 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
  * prog2  : e | prog
  * assign : expr assign2 ";"
  * assing2: e | "=" expr assign2
- * expr   : mul | mul "+" expr | mul "-" expr
+ * expr   : expr2 | expr2 "==" expr | expr2 "!=" expr
+ * expr2  : mul | mul "+" expr2 | mul "-" expr2
  * mul    : term | term "*" mul | term "/" mul
  * term   : num | ident | "(" expr ")"
  */
@@ -184,16 +199,31 @@ Node *mul()
 	return lhs;
 }
 
-Node *expr()
+Node *expr2()
 {
 	Node *lhs = mul();
 	Token *t = get_token();
 
 	if (t->type == '+') {
-		return new_node('+', lhs, expr(), 0);
+		return new_node('+', lhs, expr2(), 0);
 	}
 	if (t->type == '-') {
-		return new_node('-', lhs, expr(), 0);
+		return new_node('-', lhs, expr2(), 0);
+	}
+	unget_token();
+	return lhs;
+}
+
+Node *expr()
+{
+	Node *lhs = expr2();
+	Token *t = get_token();
+
+	if (t->type == TK_EQ) {
+		return new_node(ND_EQ, lhs, expr(), 0);
+	}
+	if (t->type == TK_NE) {
+		return new_node(ND_NE, lhs, expr(), 0);
 	}
 	unget_token();
 	return lhs;
@@ -299,6 +329,14 @@ void gen(Node *node)
 	} else if (node->type == '/') {
 		puts("  xor edx, edx");
 		puts("  div rdi");
+	} else if (node->type == ND_EQ) {
+		puts("  cmp rax, rdi");
+		puts("  sete al");
+		puts("  movzb rax, al");
+	} else if (node->type == ND_NE) {
+		puts("  cmp rax, rdi");
+		puts("  setne al");
+		puts("  movzb rax, al");
 	} else {
 		fprintf(stderr, "error node->type = %d\n", node->type);
 		exit(1);
