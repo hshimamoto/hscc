@@ -85,6 +85,7 @@ void tokenize(char *p)
 			continue;
 		}
 		if (*p == '+' || *p == '-' ||
+		    *p == '&' || *p == '^' || *p == '|' ||
 		    *p == '*' || *p == '/' ||
 		    *p == '(' || *p == ')' ||
 		    *p == '=' || *p == ';') {
@@ -135,14 +136,17 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
 }
 
 /*
- * prog   : assign prog2
- * prog2  : e | prog
- * assign : expr assign2 ";"
- * assing2: e | "=" expr assign2
- * expr   : expr2 | expr2 "==" expr | expr2 "!=" expr
- * expr2  : mul | mul "+" expr2 | mul "-" expr2
- * mul    : term | term "*" mul | term "/" mul
- * term   : num | ident | "(" expr ")"
+ * prog      : assign prog2
+ * prog2     : e | prog
+ * assign    : expr assign2 ";"
+ * assing2   : e | "=" expr assign2
+ * expr      : expr_xor | expr_xor "|" expr
+ * expr_xor  : expr_and | expr_and "^" expr_xor
+ * expr_and  : expr_cmp | expr_cmp "&" expr_and
+ * expr_cmp  : expr_plus | expr_plus "==" expr_cmp | expr_plus "!=" expr_cmp
+ * expr_plus : mul | mul "+" expr_plus | mul "-" expr_plus
+ * mul       : term | term "*" mul | term "/" mul
+ * term      : num | ident | "(" expr ")"
  */
 Node *expr();
 
@@ -199,16 +203,55 @@ Node *mul()
 	return lhs;
 }
 
-Node *expr2()
+Node *expr_plus()
 {
 	Node *lhs = mul();
 	Token *t = get_token();
 
 	if (t->type == '+') {
-		return new_node('+', lhs, expr2(), 0);
+		return new_node('+', lhs, expr_plus(), 0);
 	}
 	if (t->type == '-') {
-		return new_node('-', lhs, expr2(), 0);
+		return new_node('-', lhs, expr_plus(), 0);
+	}
+	unget_token();
+	return lhs;
+}
+
+Node *expr_cmp()
+{
+	Node *lhs = expr_plus();
+	Token *t = get_token();
+
+	if (t->type == TK_EQ) {
+		return new_node(ND_EQ, lhs, expr_cmp(), 0);
+	}
+	if (t->type == TK_NE) {
+		return new_node(ND_NE, lhs, expr_cmp(), 0);
+	}
+	unget_token();
+	return lhs;
+}
+
+Node *expr_and()
+{
+	Node *lhs = expr_cmp();
+	Token *t = get_token();
+
+	if (t->type == '&') {
+		return new_node('&', lhs, expr_and(), 0);
+	}
+	unget_token();
+	return lhs;
+}
+
+Node *expr_xor()
+{
+	Node *lhs = expr_and();
+	Token *t = get_token();
+
+	if (t->type == '^') {
+		return new_node('^', lhs, expr_xor(), 0);
 	}
 	unget_token();
 	return lhs;
@@ -216,14 +259,11 @@ Node *expr2()
 
 Node *expr()
 {
-	Node *lhs = expr2();
+	Node *lhs = expr_xor();
 	Token *t = get_token();
 
-	if (t->type == TK_EQ) {
-		return new_node(ND_EQ, lhs, expr(), 0);
-	}
-	if (t->type == TK_NE) {
-		return new_node(ND_NE, lhs, expr(), 0);
+	if (t->type == '|') {
+		return new_node('|', lhs, expr(), 0);
 	}
 	unget_token();
 	return lhs;
@@ -248,7 +288,7 @@ Node *assign2()
 	}
 
 	// bad
-	fprintf(stderr, "no semicolumn\n");
+	fprintf(stderr, "no semicolumn (t->type %u)\n", t->type);
 	exit(1);
 }
 
@@ -337,6 +377,12 @@ void gen(Node *node)
 		puts("  cmp rax, rdi");
 		puts("  setne al");
 		puts("  movzb rax, al");
+	} else if (node->type == '&') {
+		puts("  and rax, rdi");
+	} else if (node->type == '^') {
+		puts("  xor rax, rdi");
+	} else if (node->type == '|') {
+		puts("  or rax, rdi");
 	} else {
 		fprintf(stderr, "error node->type = %d\n", node->type);
 		exit(1);

@@ -39,5 +39,11 @@ try '1==1;' 1
 try '1!=1;' 0
 try 'a=1;b=1;a+b == 2;' 1
 try 'a=1;b=2;a+b == 2;' 0
+try 'a=1;b=1;a & b;' 1
+try 'a=1;b=2;a & b;' 0
+try 'a=1;b=1;a ^ b;' 0
+try 'a=1;b=2;a ^ b;' 3
+try 'a=1;b=1;a | b;' 1
+try 'a=1;b=4;a | b;' 5
 
 echo OK
