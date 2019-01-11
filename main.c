@@ -140,12 +140,12 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
  * prog2     : e | prog
  * assign    : expr assign2 ";"
  * assing2   : e | "=" expr assign2
- * expr      : expr_xor | expr_xor "|" expr
- * expr_xor  : expr_and | expr_and "^" expr_xor
- * expr_and  : expr_cmp | expr_cmp "&" expr_and
- * expr_cmp  : expr_plus | expr_plus "==" expr_cmp | expr_plus "!=" expr_cmp
- * expr_plus : mul | mul "+" expr_plus | mul "-" expr_plus
- * mul       : term | term "*" mul | term "/" mul
+ * expr      : expr_xor | expr "|" expr_xor
+ * expr_xor  : expr_and | expr_xor "^" expr_and
+ * expr_and  : expr_cmp | expr_and "&" expr_cmp
+ * expr_cmp  : expr_plus | expr_cmp "==" expr_plus | expr_cmp "!=" expr_plus
+ * expr_plus : mul | expr_plus "+" mul | expr_plus "-" mul
+ * mul       : term | mul "*" term | mul "/" term
  * term      : num | ident | "(" expr ")"
  */
 Node *expr();
@@ -191,82 +191,103 @@ Node *term()
 Node *mul()
 {
 	Node *lhs = term();
-	Token *t = get_token();
 
-	if (t->type == '*') {
-		return new_node('*', lhs, mul(), 0);
+	for (;;) {
+		Token *t = get_token();
+
+		if (t->type == '*') {
+			lhs = new_node('*', lhs, term(), 0);
+		} else if (t->type == '/') {
+			lhs = new_node('/', lhs, term(), 0);
+		} else {
+			unget_token();
+			return lhs;
+		}
 	}
-	if (t->type == '/') {
-		return new_node('/', lhs, mul(), 0);
-	}
-	unget_token();
-	return lhs;
 }
 
 Node *expr_plus()
 {
 	Node *lhs = mul();
-	Token *t = get_token();
 
-	if (t->type == '+') {
-		return new_node('+', lhs, expr_plus(), 0);
+	for (;;) {
+		Token *t = get_token();
+
+		if (t->type == '+') {
+			lhs = new_node('+', lhs, mul(), 0);
+		} else if (t->type == '-') {
+			lhs = new_node('-', lhs, mul(), 0);
+		} else {
+			unget_token();
+			return lhs;
+		}
 	}
-	if (t->type == '-') {
-		return new_node('-', lhs, expr_plus(), 0);
-	}
-	unget_token();
-	return lhs;
 }
 
 Node *expr_cmp()
 {
 	Node *lhs = expr_plus();
-	Token *t = get_token();
 
-	if (t->type == TK_EQ) {
-		return new_node(ND_EQ, lhs, expr_cmp(), 0);
+	for (;;) {
+		Token *t = get_token();
+
+		if (t->type == TK_EQ) {
+			lhs = new_node(ND_EQ, lhs, expr_plus(), 0);
+		} else if (t->type == TK_NE) {
+			lhs = new_node(ND_NE, lhs, expr_plus(), 0);
+		} else {
+			unget_token();
+			return lhs;
+		}
 	}
-	if (t->type == TK_NE) {
-		return new_node(ND_NE, lhs, expr_cmp(), 0);
-	}
-	unget_token();
-	return lhs;
 }
 
 Node *expr_and()
 {
 	Node *lhs = expr_cmp();
-	Token *t = get_token();
 
-	if (t->type == '&') {
-		return new_node('&', lhs, expr_and(), 0);
+	for (;;) {
+		Token *t = get_token();
+
+		if (t->type == '&') {
+			lhs = new_node('&', lhs, expr_cmp(), 0);
+		} else {
+			unget_token();
+			return lhs;
+		}
 	}
-	unget_token();
-	return lhs;
 }
 
 Node *expr_xor()
 {
 	Node *lhs = expr_and();
-	Token *t = get_token();
 
-	if (t->type == '^') {
-		return new_node('^', lhs, expr_xor(), 0);
+	for (;;) {
+		Token *t = get_token();
+
+		if (t->type == '^') {
+			lhs = new_node('^', lhs, expr_and(), 0);
+		} else {
+			unget_token();
+			return lhs;
+		}
 	}
-	unget_token();
-	return lhs;
 }
 
 Node *expr()
 {
 	Node *lhs = expr_xor();
-	Token *t = get_token();
 
-	if (t->type == '|') {
-		return new_node('|', lhs, expr(), 0);
+	for (;;) {
+		Token *t = get_token();
+
+		if (t->type == '|') {
+			lhs = new_node('|', lhs, expr_xor(), 0);
+		} else {
+			unget_token();
+			return lhs;
+		}
 	}
-	unget_token();
-	return lhs;
 }
 
 Node *assign2()
