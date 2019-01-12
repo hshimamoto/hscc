@@ -39,6 +39,7 @@ enum {
 typedef struct {
 	int type;
 	int val;
+	char *ident;
 } Token;
 
 Vector *tokens;
@@ -49,6 +50,21 @@ void push_token(int type, int val)
 
 	t->type = type;
 	t->val = val;
+
+	vec_push(tokens, t);
+}
+
+void push_ident(char *p, char *e)
+{
+	Token *t = malloc(sizeof(Token));
+	int len = e - p;
+
+	t->type = TK_IDENT;
+	// use the first char only
+	t->val = *p - 'a';
+	t->ident = malloc(len + 1);
+	memcpy(t->ident, p, len);
+	t->ident[len] = 0;
 
 	vec_push(tokens, t);
 }
@@ -105,10 +121,11 @@ void tokenize(char *p)
 			continue;
 		}
 		if (*p >= 'a' && *p <='z') {
-			// use the first char only
-			push_token(TK_IDENT, *p - 'a');
+			char *ident = p;
+
 			while (isalnum(*p))
 				p++;
+			push_ident(ident, p);
 			continue;
 		}
 		if (isdigit(*p)) {
@@ -136,6 +153,7 @@ typedef struct node {
 	int type;
 	struct node *lhs, *rhs;
 	int val;	// for ND_NUM;
+	char *name;	// for ND_DECFUNC
 } Node;
 
 Node *new_node(int type, Node *lhs, Node *rhs, int val)
@@ -146,6 +164,19 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
 	node->lhs = lhs;
 	node->rhs = rhs;
 	node->val = val;
+
+	return node;
+}
+
+Node *new_decfunc(Node *child, char *name)
+{
+	Node *node = malloc(sizeof(Node));
+
+	node->type = ND_DECFUNC;
+	node->lhs = child;
+	node->rhs = NULL;
+	node->val = 0;
+	node->name = name;
 
 	return node;
 }
@@ -368,7 +399,7 @@ Node *declare()
 	if (rp->type != '}')
 		goto err;
 
-	return new_node(ND_DECFUNC, node, NULL, 0);
+	return new_decfunc(node, ident->ident);
 err:
 	restore_token(save);
 	return assign();
@@ -410,8 +441,8 @@ void gen_lval(Node *node)
 void gen(Node *node)
 {
 	if (node->type == ND_DECFUNC) {
-		puts(".global main");
-		puts("main:");
+		printf(".global %s\n", node->name);
+		printf("%s:\n", node->name);
 		puts("  push rbp");
 		puts("  mov rbp, rsp");
 		puts("  sub rsp, 240"); // 30 * 8
