@@ -115,6 +115,7 @@ enum {
 	ND_IDENT,
 	ND_EQ,
 	ND_NE,
+	ND_STATEMENT,
 };
 
 typedef struct node {
@@ -324,20 +325,19 @@ Node *assign()
 	return new_node('=', lhs, rhs, 0);
 }
 
-// code store
-Vector *code;
-
-void prog()
+Node *prog()
 {
-	vec_push(code, assign());
-	Token *t = get_token();
+	Node *lhs = assign();
 
-	if (t->type == TK_EOF)
-		return;
+	for (;;) {
+		Token *t = get_token();
 
-	unget_token();
-	// next statement
-	return prog();
+		if (t->type == TK_EOF)
+			return lhs;
+
+		unget_token();
+		lhs = new_node(ND_STATEMENT, lhs, assign(), 0);
+	}
 }
 
 void gen_lval(Node *node)
@@ -356,6 +356,15 @@ void gen_lval(Node *node)
 
 void gen(Node *node)
 {
+	if (node->type == ND_STATEMENT) {
+		gen(node->lhs);
+		puts("  pop rax");
+		gen(node->rhs);
+		// omit the below
+		//puts("  pop rax");
+		//puts("  push rax");
+		return;
+	}
 	if (node->type == ND_NUM) {
 		printf("  push %d\n", node->val);
 		return;
@@ -443,15 +452,11 @@ int main(int argc, char **argv)
 
 	tokenize(p);
 
-	code = new_vector();
-	prog();
+	Node *code = prog();
 	// generate stack machine
-	int i;
-	for (i = 0; i < code->len; i++) {
-		printf("# code[%d]\n", i);
-		gen(code->data[i]);
-		puts("  pop rax");
-	}
+	gen(code);
+	puts("  pop rax");
+
 	puts("  mov rsp, rbp");
 	puts("  pop rbp");
 	puts("  ret");
