@@ -65,6 +65,16 @@ void unget_token(void)
 	pos--;
 }
 
+int save_token(void)
+{
+	return pos;
+}
+
+void restore_token(int save)
+{
+	pos = save;
+}
+
 void tokenize(char *p)
 {
 	tokens = new_vector();
@@ -88,6 +98,7 @@ void tokenize(char *p)
 		    *p == '&' || *p == '^' || *p == '|' ||
 		    *p == '*' || *p == '/' ||
 		    *p == '(' || *p == ')' ||
+		    *p == '{' || *p == '}' ||
 		    *p == '=' || *p == ';') {
 			push_token(*p, 0);
 			p++;
@@ -118,6 +129,7 @@ enum {
 	ND_EQ,
 	ND_NE,
 	ND_STATEMENT,
+	ND_DECFUNC,
 };
 
 typedef struct node {
@@ -139,8 +151,10 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
 }
 
 /*
- * prog      : assign prog2
+ * prog      : declare prog2
  * prog2     : e | prog
+ * declare   : decfunc | assign
+ * decfunc   : ident "(" ")" "{" prog "}"
  * assign    : expr assign2 ";"
  * assing2   : e | "=" expr assign2
  * expr      : expr_xor | expr "|" expr_xor
@@ -151,6 +165,7 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
  * mul       : term | mul "*" term | mul "/" term
  * term      : num | ident | "(" expr ")"
  */
+Node *prog();
 Node *expr();
 
 Node *num_or_ident()
@@ -166,7 +181,7 @@ Node *num_or_ident()
 		return new_node(ND_IDENT, NULL, NULL, val);
 	}
 	// syntax error
-	fprintf(stderr, "syntax error\n");
+	fprintf(stderr, "syntax error, expected num_or_ident but %d\n", t->type);
 	exit(1);
 }
 
@@ -327,18 +342,54 @@ Node *assign()
 	return new_node('=', lhs, rhs, 0);
 }
 
+Node *declare()
+{
+	int save = save_token();
+	Token *ident = get_token();
+
+	if (ident->type != TK_IDENT)
+		goto err;
+
+	Token *lp = get_token();
+	if (lp->type != '(')
+		goto err;
+	Token *rp = get_token();
+	if (rp->type != ')')
+		goto err;
+
+	lp = get_token();
+	if (lp->type != '{')
+		goto err;
+
+	// declare function
+	Node *node = prog();
+
+	rp = get_token();
+	if (rp->type != '}')
+		goto err;
+
+	return new_node(ND_DECFUNC, node, NULL, 0);
+err:
+	restore_token(save);
+	return assign();
+}
+
 Node *prog()
 {
-	Node *lhs = assign();
+	Node *lhs = declare();
 
 	for (;;) {
 		Token *t = get_token();
 
 		if (t->type == TK_EOF)
 			return lhs;
+		if (t->type == '}') {
+			unget_token();
+			return lhs;
+		}
 
 		unget_token();
-		lhs = new_node(ND_STATEMENT, lhs, assign(), 0);
+		lhs = new_node(ND_STATEMENT, lhs, declare(), 0);
 	}
 }
 
@@ -358,6 +409,19 @@ void gen_lval(Node *node)
 
 void gen(Node *node)
 {
+	if (node->type == ND_DECFUNC) {
+		puts(".global main");
+		puts("main:");
+		puts("  push rbp");
+		puts("  mov rbp, rsp");
+		puts("  sub rsp, 240"); // 30 * 8
+		gen(node->lhs);
+		puts("  pop rax");
+		puts("  mov rsp, rbp");
+		puts("  pop rbp");
+		puts("  ret");
+		return;
+	}
 	if (node->type == ND_STATEMENT) {
 		gen(node->lhs);
 		puts("  pop rax");
@@ -445,23 +509,12 @@ int main(int argc, char **argv)
 	fread(p, sz, 1, fp);
 	p[sz] = 0;
 
-	puts(".intel_syntax noprefix");
-	puts(".global main");
-	puts("main:");
-	puts("  push rbp");
-	puts("  mov rbp, rsp");
-	puts("  sub rsp, 240"); // 30 * 8
-
 	tokenize(p);
 
 	Node *code = prog();
 	// generate stack machine
+	puts(".intel_syntax noprefix");
 	gen(code);
-	puts("  pop rax");
-
-	puts("  mov rsp, rbp");
-	puts("  pop rbp");
-	puts("  ret");
 
 	return 0;
 }
