@@ -147,6 +147,7 @@ enum {
 	ND_NE,
 	ND_STATEMENT,
 	ND_DECFUNC,
+	ND_CALL,
 };
 
 typedef struct node {
@@ -181,6 +182,19 @@ Node *new_decfunc(Node *child, char *name)
 	return node;
 }
 
+Node *new_call(char *name)
+{
+	Node *node = malloc(sizeof(Node));
+
+	node->type = ND_CALL;
+	node->lhs = NULL;
+	node->rhs = NULL;
+	node->val = 0;
+	node->name = name;
+
+	return node;
+}
+
 /*
  * prog      : declare prog2
  * prog2     : e | prog
@@ -194,7 +208,7 @@ Node *new_decfunc(Node *child, char *name)
  * expr_cmp  : expr_plus | expr_cmp "==" expr_plus | expr_cmp "!=" expr_plus
  * expr_plus : mul | expr_plus "+" mul | expr_plus "-" mul
  * mul       : term | mul "*" term | mul "/" term
- * term      : num | ident | "(" expr ")"
+ * term      : num | ident | ident "(" ")" | "(" expr ")"
  */
 Node *prog();
 Node *expr();
@@ -208,7 +222,17 @@ Node *num_or_ident()
 		return new_node(ND_NUM, NULL, NULL, val);
 	}
 	if (t->type == TK_IDENT) {
+		char *name = t->ident;
 		int val = t->val;
+
+		t = get_token();
+		if (t->type == '(') {
+			t = get_token();
+			if (t->type == ')')
+				return new_call(name);
+			unget_token();
+		}
+		unget_token();
 		return new_node(ND_IDENT, NULL, NULL, val);
 	}
 	// syntax error
@@ -470,6 +494,11 @@ void gen(Node *node)
 		gen_lval(node);
 		puts("  pop rax");
 		puts("  mov rax, [rax]");
+		puts("  push rax");
+		return;
+	}
+	if (node->type == ND_CALL) {
+		printf("  call %s\n", node->name);
 		puts("  push rax");
 		return;
 	}
