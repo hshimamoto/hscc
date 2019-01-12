@@ -94,8 +94,10 @@ void tokenize(char *p)
 			continue;
 		}
 		if (*p >= 'a' && *p <='z') {
+			// use the first char only
 			push_token(TK_IDENT, *p - 'a');
-			p++;
+			while (isalnum(*p))
+				p++;
 			continue;
 		}
 		if (isdigit(*p)) {
