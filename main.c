@@ -44,29 +44,37 @@ typedef struct {
 
 Vector *tokens;
 
-void push_token(int type, int val)
+void push_token(int type, int val, char *ident)
 {
 	Token *t = malloc(sizeof(Token));
 
 	t->type = type;
 	t->val = val;
+	t->ident = ident;
 
 	vec_push(tokens, t);
 }
 
+void push_char(int chr)
+{
+	push_token(chr, 0, NULL);
+}
+
+void push_num(int val)
+{
+	push_token(TK_NUM, val, NULL);
+}
+
 void push_ident(char *p, char *e)
 {
-	Token *t = malloc(sizeof(Token));
+	int val = *p - 'a'; // use the first char only
 	int len = e - p;
+	char *ident = malloc(len + 1);
 
-	t->type = TK_IDENT;
-	// use the first char only
-	t->val = *p - 'a';
-	t->ident = malloc(len + 1);
-	memcpy(t->ident, p, len);
-	t->ident[len] = 0;
+	memcpy(ident, p, len);
+	ident[len] = 0;
 
-	vec_push(tokens, t);
+	push_token(TK_IDENT, val, ident);
 }
 
 int pos;
@@ -101,12 +109,12 @@ void tokenize(char *p)
 			continue;
 		}
 		if (*p == '=' && *(p + 1) == '=') {
-			push_token(TK_EQ, 0);
+			push_char(TK_EQ);
 			p += 2;
 			continue;
 		}
 		if (*p == '!' && *(p + 1) == '=') {
-			push_token(TK_NE, 0);
+			push_char(TK_NE);
 			p += 2;
 			continue;
 		}
@@ -116,7 +124,7 @@ void tokenize(char *p)
 		    *p == '(' || *p == ')' ||
 		    *p == '{' || *p == '}' ||
 		    *p == '=' || *p == ';') {
-			push_token(*p, 0);
+			push_char(*p);
 			p++;
 			continue;
 		}
@@ -131,13 +139,13 @@ void tokenize(char *p)
 		if (isdigit(*p)) {
 			int val = strtol(p, &p, 0);
 
-			push_token(TK_NUM, val);
+			push_num(val);
 			continue;
 		}
 		fprintf(stderr, "syntax error: %s\n", p);
 		exit(1);
 	}
-	push_token(TK_EOF, 0);
+	push_char(TK_EOF);
 }
 
 enum {
