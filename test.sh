@@ -55,6 +55,7 @@ try_expr 'a=1;b=2;a ^ b;' 3
 try_expr 'a=1;b=1;a | b;' 1
 try_expr 'a=1;b=4;a | b;' 5
 try_expr 'alpha=1;beta=2;alpha + beta;' 3
+try_expr 'A=1;B=2;C=3;tEmP=4; A+B+C+tEmP;' 10
 
 try 'func(){a=40;b=2;a+b;}main(){func();}' 42
 try 'func(){a=20;b=2;a+b;}main(){20+func();}' 42

@@ -102,7 +102,7 @@ void tokenize(char *p)
 			p++;
 			continue;
 		}
-		if (*p >= 'a' && *p <='z') {
+		if (isalpha(*p)) {
 			char *ident = p;
 
 			while (isalnum(*p))
