@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <memory.h>
@@ -556,14 +557,29 @@ void analyze(Node *node, int depth)
 		analyze(node->rhs, depth + 1);
 }
 
+void emit(char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	printf("\t");
+	vprintf(fmt, ap);
+	printf("\n");
+}
+
+void emit_global(char *label)
+{
+	printf(".global %s\n", label);
+	printf("%s:\n", label);
+}
+
 void gen_lval(Node *node)
 {
 	if (node->type == ND_IDENT) {
 		// rbp - N * 8
-		printf("#[%s]\n", node->name);
-		printf("  mov rax, rbp\n");
-		printf("  sub rax, %d\n", node->offset + 8);
-		printf("  push rax\n");
+		emit("#[%s]", node->name);
+		emit("mov rax, rbp");
+		emit("sub rax, %d", node->offset + 8);
+		emit("push rax");
 		return;
 	}
 
@@ -574,86 +590,85 @@ void gen_lval(Node *node)
 void gen(Node *node)
 {
 	if (node->type == ND_DECFUNC) {
-		printf(".global %s\n", node->name);
-		printf("%s:\n", node->name);
-		puts("  push rbp");
-		puts("  mov rbp, rsp");
+		emit_global(node->name);
+		emit("push rbp");
+		emit("mov rbp, rsp");
 		if (node->vars->keys->len > 0)
-			printf("  sub rsp, %d\n", (8 * node->vars->keys->len) + 8);
+			emit("sub rsp, %d", (8 * node->vars->keys->len) + 8);
 		gen(node->lhs);
-		puts("  pop rax");
-		puts("  mov rsp, rbp");
-		puts("  pop rbp");
-		puts("  ret");
+		emit("pop rax");
+		emit("mov rsp, rbp");
+		emit("pop rbp");
+		emit("ret");
 		return;
 	}
 	if (node->type == ND_STATEMENT) {
 		gen(node->lhs);
-		puts("  pop rax");
+		emit("pop rax");
 		gen(node->rhs);
 		// omit the below
-		//puts("  pop rax");
-		//puts("  push rax");
+		//emit("pop rax");
+		//emit("push rax");
 		return;
 	}
 	if (node->type == ND_NUM) {
-		printf("  push %d\n", node->val);
+		emit("push %d", node->val);
 		return;
 	}
 	if (node->type == ND_IDENT) {
 		gen_lval(node);
-		puts("  pop rax");
-		puts("  mov rax, [rax]");
-		puts("  push rax");
+		emit("pop rax");
+		emit("mov rax, [rax]");
+		emit("push rax");
 		return;
 	}
 	if (node->type == ND_CALL) {
-		printf("  call %s\n", node->name);
-		puts("  push rax");
+		emit("call %s", node->name);
+		emit("push rax");
 		return;
 	}
 	if (node->type == '=') {
 		gen_lval(node->lhs);
 		gen(node->rhs);
-		puts("  pop rdi");
-		puts("  pop rax");
-		puts("  mov [rax], rdi");
-		puts("  push rdi");
+		emit("pop rdi");
+		emit("pop rax");
+		emit("mov [rax], rdi");
+		emit("push rdi");
 		return;
 	}
 
 	gen(node->lhs);
 	gen(node->rhs);
-	puts("  pop rdi");
-	puts("  pop rax");
+	emit("pop rdi");
+	emit("pop rax");
 	if (node->type == '+') {
-		puts("  add rax, rdi");
+		emit("add rax, rdi");
 	} else if (node->type == '-') {
-		puts("  sub rax, rdi");
+		emit("sub rax, rdi");
 	} else if (node->type == '*') {
-		puts("  mul rdi");
+		emit("mul rdi");
 	} else if (node->type == '/') {
-		puts("  xor edx, edx");
-		puts("  div rdi");
+		emit("xor edx, edx");
+		emit("div rdi");
 	} else if (node->type == ND_EQ) {
-		puts("  cmp rax, rdi");
-		puts("  sete al");
-		puts("  movzb rax, al");
+		emit("cmp rax, rdi");
+		emit("sete al");
+		emit("movzb rax, al");
 	} else if (node->type == ND_NE) {
-		puts("  cmp rax, rdi");
-		puts("  setne al");
-		puts("  movzb rax, al");
+		emit("cmp rax, rdi");
+		emit("setne al");
+		emit("movzb rax, al");
 	} else if (node->type == '&') {
-		puts("  and rax, rdi");
+		emit("and rax, rdi");
 	} else if (node->type == '^') {
-		puts("  xor rax, rdi");
+		emit("xor rax, rdi");
 	} else if (node->type == '|') {
-		puts("  or rax, rdi");
+		emit("or rax, rdi");
 	} else {
 		fprintf(stderr, "error node->type = %d\n", node->type);
 		exit(1);
 	}
-	puts("  push rax");
+	emit("push rax");
 }
 
 int main(int argc, char **argv)
