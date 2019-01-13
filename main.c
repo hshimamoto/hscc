@@ -9,6 +9,7 @@
 enum {
 	ND_NUM = 256,
 	ND_IDENT,
+	ND_BINOP,	// binary operation
 	ND_EQ,
 	ND_NE,
 	ND_STATEMENT,
@@ -19,7 +20,8 @@ enum {
 typedef struct node {
 	int type;
 	struct node *lhs, *rhs;
-	int val;	// for ND_NUM;
+	int optype;	// for ND_BINOP
+	int val;	// for ND_NUM
 	char *name;	// for ND_DECFUNC
 	int offset;	// local variable offset for ND_INDENT
 	Map *vars;	// variables for DECFUNC
@@ -48,6 +50,18 @@ Node *new_ident(char *name)
 	node->rhs = NULL;
 	node->val = 0;
 	node->name = name;
+
+	return node;
+}
+
+Node *new_binop(int optype, Node *lhs, Node *rhs)
+{
+	Node *node = malloc(sizeof(Node));
+
+	node->type = ND_BINOP;
+	node->lhs = lhs;
+	node->rhs = rhs;
+	node->optype = optype;
 
 	return node;
 }
@@ -149,10 +163,8 @@ Node *mul()
 	for (;;) {
 		Token *t = get_token();
 
-		if (t->type == '*') {
-			lhs = new_node('*', lhs, term(), 0);
-		} else if (t->type == '/') {
-			lhs = new_node('/', lhs, term(), 0);
+		if (t->type == '*' || t->type == '/') {
+			lhs = new_binop(t->type, lhs, term());
 		} else {
 			unget_token();
 			return lhs;
@@ -167,10 +179,8 @@ Node *expr_plus()
 	for (;;) {
 		Token *t = get_token();
 
-		if (t->type == '+') {
-			lhs = new_node('+', lhs, mul(), 0);
-		} else if (t->type == '-') {
-			lhs = new_node('-', lhs, mul(), 0);
+		if (t->type == '+' || t->type == '-') {
+			lhs = new_binop(t->type, lhs, mul());
 		} else {
 			unget_token();
 			return lhs;
@@ -204,7 +214,7 @@ Node *expr_and()
 		Token *t = get_token();
 
 		if (t->type == '&') {
-			lhs = new_node('&', lhs, expr_cmp(), 0);
+			lhs = new_binop('&', lhs, expr_cmp());
 		} else {
 			unget_token();
 			return lhs;
@@ -220,7 +230,7 @@ Node *expr_xor()
 		Token *t = get_token();
 
 		if (t->type == '^') {
-			lhs = new_node('^', lhs, expr_and(), 0);
+			lhs = new_binop('^', lhs, expr_and());
 		} else {
 			unget_token();
 			return lhs;
@@ -236,7 +246,7 @@ Node *expr()
 		Token *t = get_token();
 
 		if (t->type == '|') {
-			lhs = new_node('|', lhs, expr_xor(), 0);
+			lhs = new_binop('|', lhs, expr_xor());
 		} else {
 			unget_token();
 			return lhs;
@@ -427,9 +437,7 @@ void analyze(Node *node, int depth)
 
 		return;
 	}
-	if (node->type == '+' || node->type == '-' ||
-	    node->type == '&' || node->type == '^' || node->type == '|' ||
-	    node->type == '*' || node->type == '/' ||
+	if (node->type == ND_BINOP ||
 	    node->type == ND_EQ || node->type == ND_NE) {
 		analyze(node->lhs, depth + 1);
 		analyze(node->rhs, depth + 1);
@@ -542,39 +550,58 @@ void gen(Node *node)
 
 	int rl = node->lhs->reg, rr = node->rhs->reg;
 
-	if (node->type == '+') {
-		emit("add %s, %s", regname[rl], regname[rr]);
-	} else if (node->type == '-') {
-		emit("sub %s, %s", regname[rl], regname[rr]);
-	} else if (node->type == '*') {
-		emit("mov rax, %s", regname[rl]);
-		emit("mul %s", regname[rr]);
-		emit("mov %s, rax", regname[rl]);
-	} else if (node->type == '/') {
-		emit("xor edx, edx");
-		emit("mov rax, %s", regname[rl]);
-		emit("div %s", regname[rr]);
-		emit("mov %s, rax", regname[rl]);
-	} else if (node->type == ND_EQ) {
+	if (node->type == ND_BINOP) {
+		char *op = NULL;
+
+		if (node->optype == '*') {
+			emit("mov rax, %s", regname[rl]);
+			emit("mul %s", regname[rr]);
+			emit("mov %s, rax", regname[rl]);
+			return;
+		}
+		if (node->optype == '/') {
+			emit("xor edx, edx");
+			emit("mov rax, %s", regname[rl]);
+			emit("div %s", regname[rr]);
+			emit("mov %s, rax", regname[rl]);
+			return;
+		}
+
+		if (node->optype == '+')
+			op = "add";
+		if (node->optype == '-')
+			op = "sub";
+		if (node->optype == '&')
+			op = "and";
+		if (node->optype == '^')
+			op = "xor";
+		if (node->optype == '|')
+			op = "or";
+
+		if (!op) {
+			fprintf(stderr, "unknown BINOP %d\n", node->optype);
+			exit(1);
+		}
+
+		emit("%s %s, %s", op, regname[rl], regname[rr]);
+		return;
+	}
+	if (node->type == ND_EQ) {
 		emit("cmp %s, %s", regname[rl], regname[rr]);
 		emit("sete al");
 		emit("movzb rax, al");
 		emit("mov %s, rax", regname[rl]);
-	} else if (node->type == ND_NE) {
+		return;
+	}
+	if (node->type == ND_NE) {
 		emit("cmp %s, %s", regname[rl], regname[rr]);
 		emit("setne al");
 		emit("movzb rax, al");
 		emit("mov %s, rax", regname[rl]);
-	} else if (node->type == '&') {
-		emit("and %s, %s", regname[rl], regname[rr]);
-	} else if (node->type == '^') {
-		emit("xor %s, %s", regname[rl], regname[rr]);
-	} else if (node->type == '|') {
-		emit("or %s, %s", regname[rl], regname[rr]);
-	} else {
-		fprintf(stderr, "error node->type = %d\n", node->type);
-		exit(1);
+		return;
 	}
+	fprintf(stderr, "error node->type = %d\n", node->type);
+	exit(1);
 }
 
 int main(int argc, char **argv)
