@@ -487,7 +487,6 @@ void gen_lval(Node *node)
 		emit("#[%s]", node->name);
 		emit("mov rax, rbp");
 		emit("sub rax, %d", node->offset + 8);
-		emit("push rax");
 		return;
 	}
 
@@ -504,7 +503,7 @@ void gen(Node *node)
 		if (node->vars->keys->len > 0)
 			emit("sub rsp, %d", (8 * node->vars->keys->len) + 8);
 		gen(node->lhs);
-		emit("pop rax");
+		emit("mov rax, %s", regname[node->lhs->reg]);
 		emit("mov rsp, rbp");
 		emit("pop rbp");
 		emit("ret");
@@ -512,23 +511,16 @@ void gen(Node *node)
 	}
 	if (node->type == ND_STATEMENT) {
 		gen(node->lhs);
-		emit("pop rax");
 		gen(node->rhs);
-		// omit the below
-		//emit("pop rax");
-		//emit("push rax");
 		return;
 	}
 	if (node->type == ND_NUM) {
 		emit("mov %s, %d", regname[node->reg], node->val);
-		emit("push %s", regname[node->reg]);
 		return;
 	}
 	if (node->type == ND_IDENT) {
 		gen_lval(node);
-		emit("pop rax");
 		emit("mov %s, [rax]", regname[node->reg]);
-		emit("push %s", regname[node->reg]);
 		return;
 	}
 	if (node->type == ND_CALL) {
@@ -536,16 +528,12 @@ void gen(Node *node)
 		emit("call %s", node->name);
 		gen_restoreregs(node);
 		emit("mov %s, rax", regname[node->reg]);
-		emit("push %s", regname[node->reg]);
 		return;
 	}
 	if (node->type == '=') {
-		gen_lval(node->lhs);
 		gen(node->rhs);
-		emit("pop rdi");
-		emit("pop rax");
-		emit("mov [rax], rdi");
-		emit("push rdi");
+		gen_lval(node->lhs);
+		emit("mov [rax], %s", regname[node->reg]);
 		return;
 	}
 
@@ -554,8 +542,6 @@ void gen(Node *node)
 
 	int rl = node->lhs->reg, rr = node->rhs->reg;
 
-	emit("pop %s", regname[rr]);
-	emit("pop %s", regname[rl]);
 	if (node->type == '+') {
 		emit("add %s, %s", regname[rl], regname[rr]);
 	} else if (node->type == '-') {
@@ -589,7 +575,6 @@ void gen(Node *node)
 		fprintf(stderr, "error node->type = %d\n", node->type);
 		exit(1);
 	}
-	emit("push %s", regname[node->reg]);
 }
 
 int main(int argc, char **argv)
@@ -619,7 +604,6 @@ int main(int argc, char **argv)
 
 	Node *code = prog();
 	analyze(code, 0);
-	// generate stack machine
 	puts(".intel_syntax noprefix");
 	gen(code);
 
