@@ -1,5 +1,5 @@
 CFLAGS = -Wall -g -O2 -std=c11
-objs = main.o utils.o
+objs = main.o token.o utils.o
 
 hscc: $(objs)
 	$(CC) -o $@ $(objs)
