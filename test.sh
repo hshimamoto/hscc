@@ -41,6 +41,7 @@ try_expr '4/2;' 2
 try_expr '(1+2)*3;' 9
 try_expr '((1+2)*5+5)/2;' 10
 try_expr '4/2*3;' 6
+try_expr '1+(2+(3+(4+5)));' 15
 try_expr 'a=1;b=2;a+b;' 3
 try_expr 'a=b=c=d=1;a+b+c+d;' 4
 try_expr '1==1;' 1
@@ -60,5 +61,6 @@ try 'func(){a=20;b=2;a+b;}main(){20+func();}' 42
 try 'func1(){a=20;b=2;a+b;} func2(){20;}main(){func1() + func2();}' 42
 try 'func1(){a=20;b=1;a+b;} func2(){20;}main(){a=1; func1() + func2() + a;}' 42
 try 'func1(){10;} func2(){func1()*(func1()+func1());} func3(){a=2;b=3;func2()+a*b-func2();} main(){func3();}' 6
+try 'f(){10;} main(){f()+(f()+(f()+(f()+2)));}' 42
 
 echo OK
