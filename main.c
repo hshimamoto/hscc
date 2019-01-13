@@ -23,6 +23,7 @@ typedef struct node {
 	char *name;	// for ND_DECFUNC
 	int offset;	// local variable offset for ND_INDENT
 	Map *vars;	// variables for DECFUNC
+	int reg;	// allocated register
 } Node;
 
 Node *new_node(int type, Node *lhs, Node *rhs, int val)
@@ -333,6 +334,29 @@ typedef struct {
 } Variable;
 
 Map *variables;
+int regs; // rdi, rsi, rcx, r8, r9, r10, r11
+char *regname[7] = {
+	"rdi", "rsi", "rcx", "r8", "r9", "r10", "r11"
+};
+
+int reg_alloc(void)
+{
+	for (int i = 0; i < 7; i++) {
+		int b = 1 << i;
+		if (regs & b)
+			continue;
+		regs |= b;
+		return i;
+	}
+	fprintf(stderr, "no more regs\n");
+	exit(1);
+}
+
+void reg_free(int r)
+{
+	int b = 1 << r;
+	regs &= ~b;
+}
 
 void analyze(Node *node, int depth)
 {
@@ -348,8 +372,25 @@ void analyze(Node *node, int depth)
 		variables = prev_vars;
 		return;
 	}
+	if (node->type == ND_STATEMENT) {
+		int prev_regs = regs;
+
+		// left
+		regs = 0;
+		analyze(node->lhs, depth + 1);
+		// restore
+		regs = prev_regs;
+		// right
+		regs = 0;
+		analyze(node->rhs, depth + 1);
+		// restore
+		regs = prev_regs;
+
+		return;
+	}
 	if (node->type == ND_NUM) {
-		// nothing to do
+		// allocate reg
+		node->reg = reg_alloc();
 		return;
 	}
 	if (node->type == ND_IDENT) {
@@ -364,10 +405,36 @@ void analyze(Node *node, int depth)
 			map_set(variables, node->name, var);
 		}
 		node->offset = var->offset;
+		// allocate reg
+		node->reg = reg_alloc();
 		return;
 	}
 	if (node->type == ND_CALL) {
-		// nothing to do
+		// allocate reg
+		node->reg = reg_alloc();
+		return;
+	}
+	if (node->type == '=') {
+		// lhs must be IDENT
+		analyze(node->lhs, depth + 1);
+		// don't care about regs
+		reg_free(node->lhs->reg);
+		analyze(node->rhs, depth + 1);
+		// reuse rhs register
+		node->reg = node->rhs->reg;
+
+		return;
+	}
+	if (node->type == '+' || node->type == '-' ||
+	    node->type == '&' || node->type == '^' || node->type == '|' ||
+	    node->type == '*' || node->type == '/' ||
+	    node->type == ND_EQ || node->type == ND_NE) {
+		analyze(node->lhs, depth + 1);
+		analyze(node->rhs, depth + 1);
+		// reuse lhs register
+		node->reg = node->lhs->reg;
+		reg_free(node->rhs->reg);
+
 		return;
 	}
 	if (node->lhs)
@@ -431,19 +498,21 @@ void gen(Node *node)
 		return;
 	}
 	if (node->type == ND_NUM) {
-		emit("push %d", node->val);
+		emit("mov %s, %d", regname[node->reg], node->val);
+		emit("push %s", regname[node->reg]);
 		return;
 	}
 	if (node->type == ND_IDENT) {
 		gen_lval(node);
 		emit("pop rax");
-		emit("mov rax, [rax]");
-		emit("push rax");
+		emit("mov %s, [rax]", regname[node->reg]);
+		emit("push %s", regname[node->reg]);
 		return;
 	}
 	if (node->type == ND_CALL) {
 		emit("call %s", node->name);
-		emit("push rax");
+		emit("mov %s, rax", regname[node->reg]);
+		emit("push %s", regname[node->reg]);
 		return;
 	}
 	if (node->type == '=') {
@@ -458,36 +527,45 @@ void gen(Node *node)
 
 	gen(node->lhs);
 	gen(node->rhs);
-	emit("pop rdi");
-	emit("pop rax");
+
+	int rl = node->lhs->reg, rr = node->rhs->reg;
+
+	emit("pop %s", regname[rr]);
+	emit("pop %s", regname[rl]);
 	if (node->type == '+') {
-		emit("add rax, rdi");
+		emit("add %s, %s", regname[rl], regname[rr]);
 	} else if (node->type == '-') {
-		emit("sub rax, rdi");
+		emit("sub %s, %s", regname[rl], regname[rr]);
 	} else if (node->type == '*') {
-		emit("mul rdi");
+		emit("mov rax, %s", regname[rl]);
+		emit("mul %s", regname[rr]);
+		emit("mov %s, rax", regname[rl]);
 	} else if (node->type == '/') {
 		emit("xor edx, edx");
-		emit("div rdi");
+		emit("mov rax, %s", regname[rl]);
+		emit("div %s", regname[rr]);
+		emit("mov %s, rax", regname[rl]);
 	} else if (node->type == ND_EQ) {
-		emit("cmp rax, rdi");
+		emit("cmp %s, %s", regname[rl], regname[rr]);
 		emit("sete al");
 		emit("movzb rax, al");
+		emit("mov %s, rax", regname[rl]);
 	} else if (node->type == ND_NE) {
-		emit("cmp rax, rdi");
+		emit("cmp %s, %s", regname[rl], regname[rr]);
 		emit("setne al");
 		emit("movzb rax, al");
+		emit("mov %s, rax", regname[rl]);
 	} else if (node->type == '&') {
-		emit("and rax, rdi");
+		emit("and %s, %s", regname[rl], regname[rr]);
 	} else if (node->type == '^') {
-		emit("xor rax, rdi");
+		emit("xor %s, %s", regname[rl], regname[rr]);
 	} else if (node->type == '|') {
-		emit("or rax, rdi");
+		emit("or %s, %s", regname[rl], regname[rr]);
 	} else {
 		fprintf(stderr, "error node->type = %d\n", node->type);
 		exit(1);
 	}
-	emit("push rax");
+	emit("push %s", regname[node->reg]);
 }
 
 int main(int argc, char **argv)
