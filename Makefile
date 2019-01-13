@@ -7,6 +7,10 @@ hscc: $(objs)
 %.o: %.c
 	$(CC) -o $@ $(CFLAGS) -c $<
 
+main.o: utils.h token.h
+utils.o: utils.h
+token.o: token.h
+
 test: hscc
 	./test.sh
 
