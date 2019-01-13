@@ -28,6 +28,43 @@ void vec_push(Vector *v, void *e)
 	v->data[v->len++] = e;
 }
 
+typedef struct {
+	Vector *keys;
+	Vector *vals;
+} Map;
+
+Map *new_map(void)
+{
+	Map *m = malloc(sizeof(Map));
+
+	m->keys = new_vector();
+	m->vals = new_vector();
+
+	return m;
+}
+
+void map_set(Map *m, char *key, void *val)
+{
+	for (int i = 0; i < m->keys->len; i++) {
+		if (strcmp(m->keys->data[i], key))
+			continue;
+		m->vals[i].data[i] = val;
+		return;
+	}
+	vec_push(m->keys, key);
+	vec_push(m->vals, val);
+}
+
+void *map_get(Map *m, char *key)
+{
+	for (int i = 0; i < m->keys->len; i++) {
+		if (strcmp(m->keys->data[i], key))
+			continue;
+		return m->vals->data[i];
+	}
+	return NULL;
+}
+
 enum {
 	TK_NUM = 256,
 	TK_IDENT,
@@ -163,6 +200,8 @@ typedef struct node {
 	struct node *lhs, *rhs;
 	int val;	// for ND_NUM;
 	char *name;	// for ND_DECFUNC
+	int offset;	// local variable offset for ND_INDENT
+	Map *vars;	// variables for DECFUNC
 } Node;
 
 Node *new_node(int type, Node *lhs, Node *rhs, int val)
@@ -173,6 +212,19 @@ Node *new_node(int type, Node *lhs, Node *rhs, int val)
 	node->lhs = lhs;
 	node->rhs = rhs;
 	node->val = val;
+
+	return node;
+}
+
+Node *new_ident(char *name)
+{
+	Node *node = malloc(sizeof(Node));
+
+	node->type = ND_IDENT;
+	node->lhs = NULL;
+	node->rhs = NULL;
+	node->val = 0;
+	node->name = name;
 
 	return node;
 }
@@ -241,7 +293,7 @@ Node *num_or_ident()
 			unget_token();
 		}
 		unget_token();
-		return new_node(ND_IDENT, NULL, NULL, val);
+		return new_ident(name);
 	}
 	// syntax error
 	fprintf(stderr, "syntax error, expected num_or_ident but %d\n", t->type);
@@ -456,12 +508,62 @@ Node *prog()
 	}
 }
 
+typedef struct {
+	char *name;
+	int offset;
+} Variable;
+
+Map *variables;
+
+void analyze(Node *node, int depth)
+{
+	if (node->type == ND_DECFUNC) {
+		// setup
+		Map *prev_vars = variables;
+		node->vars = new_map();
+		variables = node->vars;
+
+		analyze(node->lhs, depth + 1);
+
+		// restore
+		variables = prev_vars;
+		return;
+	}
+	if (node->type == ND_NUM) {
+		// nothing to do
+		return;
+	}
+	if (node->type == ND_IDENT) {
+		// local variables
+		Variable *var = map_get(variables, node->name);
+
+		if (!var) {
+			// new variable
+			var = malloc(sizeof(Variable));
+			var->name = node->name;
+			var->offset = (variables->keys->len) * 8;
+			map_set(variables, node->name, var);
+		}
+		node->offset = var->offset;
+		return;
+	}
+	if (node->type == ND_CALL) {
+		// nothing to do
+		return;
+	}
+	if (node->lhs)
+		analyze(node->lhs, depth + 1);
+	if (node->rhs)
+		analyze(node->rhs, depth + 1);
+}
+
 void gen_lval(Node *node)
 {
 	if (node->type == ND_IDENT) {
 		// rbp - N * 8
+		printf("#[%s]\n", node->name);
 		printf("  mov rax, rbp\n");
-		printf("  sub rax, %d\n", (node->val + 1) * 8);
+		printf("  sub rax, %d\n", node->offset + 8);
 		printf("  push rax\n");
 		return;
 	}
@@ -477,7 +579,8 @@ void gen(Node *node)
 		printf("%s:\n", node->name);
 		puts("  push rbp");
 		puts("  mov rbp, rsp");
-		puts("  sub rsp, 240"); // 30 * 8
+		if (node->vars->keys->len > 0)
+			printf("  sub rsp, %d\n", (8 * node->vars->keys->len) + 8);
 		gen(node->lhs);
 		puts("  pop rax");
 		puts("  mov rsp, rbp");
@@ -580,6 +683,7 @@ int main(int argc, char **argv)
 	tokenize(p);
 
 	Node *code = prog();
+	analyze(code, 0);
 	// generate stack machine
 	puts(".intel_syntax noprefix");
 	gen(code);
