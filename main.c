@@ -10,12 +10,14 @@ typedef struct {
 
 int BUFSZ = 32;
 
-Vector *new_vector()
+Vector *new_vector(void)
 {
 	Vector *v = malloc(sizeof(Vector));
+
 	v->data = malloc(sizeof(void *) * BUFSZ);
 	v->capa = BUFSZ;
 	v->len = 0;
+
 	return v;
 }
 
