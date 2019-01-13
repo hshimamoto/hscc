@@ -59,5 +59,6 @@ try 'func(){a=40;b=2;a+b;}main(){func();}' 42
 try 'func(){a=20;b=2;a+b;}main(){20+func();}' 42
 try 'func1(){a=20;b=2;a+b;} func2(){20;}main(){func1() + func2();}' 42
 try 'func1(){a=20;b=1;a+b;} func2(){20;}main(){a=1; func1() + func2() + a;}' 42
+try 'func1(){10;} func2(){func1()*(func1()+func1());} func3(){a=2;b=3;func2()+a*b-func2();} main(){func3();}' 6
 
 echo OK

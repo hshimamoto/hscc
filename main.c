@@ -24,6 +24,7 @@ typedef struct node {
 	int offset;	// local variable offset for ND_INDENT
 	Map *vars;	// variables for DECFUNC
 	int reg;	// allocated register
+	int regs;	// save registers on call for ND_CALL
 } Node;
 
 Node *new_node(int type, Node *lhs, Node *rhs, int val)
@@ -410,6 +411,7 @@ void analyze(Node *node, int depth)
 		return;
 	}
 	if (node->type == ND_CALL) {
+		node->regs = regs; // we are using regs
 		// allocate reg
 		node->reg = reg_alloc();
 		return;
@@ -456,6 +458,26 @@ void emit_global(char *label)
 {
 	printf(".global %s\n", label);
 	printf("%s:\n", label);
+}
+
+void gen_saveregs(Node *node)
+{
+	emit("# save regs %d", node->regs);
+	for (int i = 0; i < 7; i++) {
+		int b = 1 << i;
+		if (node->regs & b)
+			emit("push %s", regname[i]);
+	}
+}
+
+void gen_restoreregs(Node *node)
+{
+	emit("# restore regs %d", node->regs);
+	for (int i = 6; i >= 0; i--) {
+		int b = 1 << i;
+		if (node->regs & b)
+			emit("pop %s", regname[i]);
+	}
 }
 
 void gen_lval(Node *node)
@@ -510,7 +532,9 @@ void gen(Node *node)
 		return;
 	}
 	if (node->type == ND_CALL) {
+		gen_saveregs(node);
 		emit("call %s", node->name);
+		gen_restoreregs(node);
 		emit("mov %s, rax", regname[node->reg]);
 		emit("push %s", regname[node->reg]);
 		return;
