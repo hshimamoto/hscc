@@ -106,14 +106,13 @@ void push_num(int val)
 
 void push_ident(char *p, char *e)
 {
-	int val = *p - 'a'; // use the first char only
 	int len = e - p;
 	char *ident = malloc(len + 1);
 
 	memcpy(ident, p, len);
 	ident[len] = 0;
 
-	push_token(TK_IDENT, val, ident);
+	push_token(TK_IDENT, 0, ident);
 }
 
 int pos;
@@ -280,12 +279,10 @@ Node *num_or_ident()
 	Token *t = get_token();
 
 	if (t->type == TK_NUM) {
-		int val = t->val;
-		return new_node(ND_NUM, NULL, NULL, val);
+		return new_node(ND_NUM, NULL, NULL, t->val);
 	}
 	if (t->type == TK_IDENT) {
 		char *name = t->ident;
-		int val = t->val;
 
 		t = get_token();
 		if (t->type == '(') {
