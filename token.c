@@ -7,6 +7,7 @@
 #include "token.h"
 
 Vector *tokens;
+int col, line;
 
 void push_token(int type, int val, char *ident)
 {
@@ -15,6 +16,8 @@ void push_token(int type, int val, char *ident)
 	t->type = type;
 	t->val = val;
 	t->ident = ident;
+	t->col = col;
+	t->line = line;
 
 	vec_push(tokens, t);
 }
@@ -65,12 +68,20 @@ void restore_token(int save)
 void tokenize(char *p)
 {
 	tokens = new_vector();
+	char *head = p;
 
 	while (*p) {
+		if (*p == '\n') {
+			p++;
+			line++;
+			head = p;
+			continue;
+		}
 		if (isspace(*p)) {
 			p++;
 			continue;
 		}
+		col = p - head;
 		if (*p == '=' && *(p + 1) == '=') {
 			push_char(TK_EQ);
 			p += 2;
@@ -105,7 +116,7 @@ void tokenize(char *p)
 			push_num(val);
 			continue;
 		}
-		fprintf(stderr, "syntax error: %s\n", p);
+		fprintf(stderr, "syntax error: %s line:%d col:%d\n", p, line, col);
 		exit(1);
 	}
 	push_char(TK_EOF);

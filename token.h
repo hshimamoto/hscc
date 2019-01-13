@@ -13,6 +13,7 @@ typedef struct {
 	int type;
 	int val;
 	char *ident;
+	int col, line;
 } Token;
 
 extern Token *get_token(void);
