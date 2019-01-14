@@ -63,5 +63,7 @@ try 'func1(){a=20;b=2;a+b;} func2(){20;}main(){func1() + func2();}' 42
 try 'func1(){a=20;b=1;a+b;} func2(){20;}main(){a=1; func1() + func2() + a;}' 42
 try 'func1(){10;} func2(){func1()*(func1()+func1());} func3(){a=2;b=3;func2()+a*b-func2();} main(){func3();}' 6
 try 'f(){10;} main(){f()+(f()+(f()+(f()+2)));}' 42
+try 'f(a,b,c){a*b+c;} main(){A=8;B=5;C=2;f(A,B,C);}' 42
+try 'f(a,b,c){a*b+c;} main(){A=2;B=8;C=5;f(B,C,A);}' 42
 
 echo OK

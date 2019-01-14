@@ -15,6 +15,7 @@ enum {
 	ND_STATEMENT,
 	ND_DECFUNC,
 	ND_CALL,
+	ND_PARAMS,	// parameters
 };
 
 typedef struct node {
@@ -27,6 +28,7 @@ typedef struct node {
 	Map *vars;	// variables for DECFUNC
 	int reg;	// allocated register
 	int regs;	// save registers on call for ND_CALL
+	Vector *params;	// params for ND_DECFUNC and ND_CALL
 } Node;
 
 Node *new_node(int type, Node *lhs, Node *rhs, int val)
@@ -66,7 +68,7 @@ Node *new_binop(int optype, Node *lhs, Node *rhs)
 	return node;
 }
 
-Node *new_decfunc(Node *child, char *name)
+Node *new_decfunc(Node *child, char *name, Vector *params)
 {
 	Node *node = malloc(sizeof(Node));
 
@@ -75,11 +77,12 @@ Node *new_decfunc(Node *child, char *name)
 	node->rhs = NULL;
 	node->val = 0;
 	node->name = name;
+	node->params = params;
 
 	return node;
 }
 
-Node *new_call(char *name)
+Node *new_call(char *name, Vector *params)
 {
 	Node *node = malloc(sizeof(Node));
 
@@ -88,6 +91,7 @@ Node *new_call(char *name)
 	node->rhs = NULL;
 	node->val = 0;
 	node->name = name;
+	node->params = params;
 
 	return node;
 }
@@ -105,10 +109,37 @@ Node *new_call(char *name)
  * expr_cmp  : expr_plus | expr_cmp "==" expr_plus | expr_cmp "!=" expr_plus
  * expr_plus : mul | expr_plus "+" mul | expr_plus "-" mul
  * mul       : term | mul "*" term | mul "/" term
- * term      : num | ident | ident "(" ")" | "(" expr ")"
+ * term      : num | ident | call | "(" expr ")"
+ * call      : indent "(" params ")"
+ * params    : e | ident "," params
  */
 Node *prog();
 Node *expr();
+
+Vector *params()
+{
+	Token *t = get_token();
+
+	if (t->type == ')')
+		return NULL;
+
+	Vector *p = new_vector();
+
+	for (;;) {
+		if (t->type == TK_IDENT) {
+			// push variable names
+			vec_push(p, t->ident);
+			t = get_token();
+		}
+		if (t->type == ')')
+			return p;
+		if (t->type != ',') {
+			fprintf(stderr, "invalid params %d (%d:%d)\n", t->type, t->line, t->col);
+			exit(1);
+		}
+		t = get_token();
+	}
+}
 
 Node *num_or_ident()
 {
@@ -121,12 +152,8 @@ Node *num_or_ident()
 		char *name = t->ident;
 
 		t = get_token();
-		if (t->type == '(') {
-			t = get_token();
-			if (t->type == ')')
-				return new_call(name);
-			unget_token();
-		}
+		if (t->type == '(')
+			return new_call(name, params());
 		unget_token();
 		return new_ident(name);
 	}
@@ -273,7 +300,7 @@ Node *assign2()
 	}
 
 	// bad
-	fprintf(stderr, "no semicolumn (t->type %u)\n", t->type);
+	fprintf(stderr, "no semicolumn (t->type %u %d:%d)\n", t->type, t->line, t->col);
 	exit(1);
 }
 
@@ -296,25 +323,24 @@ Node *declare()
 	if (ident->type != TK_IDENT)
 		goto err;
 
-	Token *lp = get_token();
-	if (lp->type != '(')
-		goto err;
-	Token *rp = get_token();
-	if (rp->type != ')')
+	Token *t = get_token();
+	if (t->type != '(')
 		goto err;
 
-	lp = get_token();
-	if (lp->type != '{')
+	Vector *p = params();
+
+	t = get_token();
+	if (t->type != '{')
 		goto err;
 
 	// declare function
 	Node *node = prog();
 
-	rp = get_token();
-	if (rp->type != '}')
+	t = get_token();
+	if (t->type != '}')
 		goto err;
 
-	return new_decfunc(node, ident->ident);
+	return new_decfunc(node, ident->ident, p);
 err:
 	restore_token(save);
 	return assign();
@@ -377,6 +403,17 @@ void analyze(Node *node, int depth)
 		node->vars = new_map();
 		variables = node->vars;
 
+		// map params to local variables
+		if (node->params) {
+			Vector *p = node->params;
+			for (int i = 0; i < p->len; i++) {
+				Variable *var = malloc(sizeof(Variable));
+
+				var->name = p->data[i];
+				var->offset = (variables->keys->len) * 8;
+				map_set(variables, var->name, var);
+			}
+		}
 		analyze(node->lhs, depth + 1);
 
 		// restore
@@ -510,6 +547,34 @@ void gen(Node *node)
 		emit("mov rbp, rsp");
 		if (node->vars->keys->len > 0)
 			emit("sub rsp, %d", (8 * node->vars->keys->len) + 8);
+		// parameters
+		if (node->params) {
+			Vector *p = node->params;
+			emit("# params %d", p->len);
+			Variable *var = NULL;
+			if (p->len > 0) {
+				var = map_get(node->vars, p->data[0]);
+				emit("# rdi [%s] offset %d", var->name, var->offset);
+				emit("mov [rbp-%d], rdi", var->offset + 8);
+			}
+			if (p->len > 1) {
+				var = map_get(node->vars, p->data[1]);
+				emit("# rsi [%s] offset %d", var->name, var->offset);
+				emit("mov [rbp-%d], rsi", var->offset + 8);
+			}
+			if (p->len > 2) {
+				var = map_get(node->vars, p->data[2]);
+				emit("# rdx [%s] offset %d", var->name, var->offset);
+				emit("mov [rbp-%d], rdx", var->offset + 8);
+			}
+			if (p->len > 3) {
+				var = map_get(node->vars, p->data[3]);
+				emit("# rcx [%s] offset %d", var->name, var->offset);
+				emit("mov [rbp-%d], rcx", var->offset + 8);
+			}
+		}
+		// set variables
+		variables = node->vars;
 		gen(node->lhs);
 		emit("mov rax, %s", regname[node->lhs->reg]);
 		emit("mov rsp, rbp");
@@ -533,6 +598,31 @@ void gen(Node *node)
 	}
 	if (node->type == ND_CALL) {
 		gen_saveregs(node);
+		if (node->params) {
+			Vector *p = node->params;
+			emit("# params %d", p->len);
+			Variable *var = NULL;
+			if (p->len > 0) {
+				var = map_get(variables, p->data[0]);
+				emit("# rdi [%s] offset %d", var->name, var->offset);
+				emit("mov rdi, [rbp-%d]", var->offset + 8);
+			}
+			if (p->len > 1) {
+				var = map_get(variables, p->data[1]);
+				emit("# rsi [%s] offset %d", var->name, var->offset);
+				emit("mov rsi, [rbp-%d]", var->offset + 8);
+			}
+			if (p->len > 2) {
+				var = map_get(variables, p->data[2]);
+				emit("# rdx [%s] offset %d", var->name, var->offset);
+				emit("mov rdx, [rbp-%d]", var->offset + 8);
+			}
+			if (p->len > 3) {
+				var = map_get(variables, p->data[3]);
+				emit("# rcx [%s] offset %d", var->name, var->offset);
+				emit("mov rcx, [rbp-%d]", var->offset + 8);
+			}
+		}
 		emit("call %s", node->name);
 		gen_restoreregs(node);
 		emit("mov %s, rax", regname[node->reg]);
