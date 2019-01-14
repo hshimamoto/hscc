@@ -124,7 +124,7 @@ Vector *params(void)
 	for (;;) {
 		if (t->type == TK_IDENT) {
 			// push variable names
-			vec_push(p, t->ident);
+			vec_push(p, t->str);
 			t = get_token();
 		}
 		if (t->type == ')')
@@ -145,7 +145,7 @@ Node *num_or_ident(void)
 		return new_node(ND_NUM, NULL, NULL, t->val);
 	}
 	if (t->type == TK_IDENT) {
-		char *name = t->ident;
+		char *name = t->str;
 
 		t = get_token();
 		if (t->type == '(')
@@ -336,7 +336,7 @@ Node *declare(void)
 	if (t->type != '}')
 		goto err;
 
-	return new_decfunc(node, ident->ident, p);
+	return new_decfunc(node, ident->str, p);
 err:
 	restore_token(save);
 	return assign();

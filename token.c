@@ -9,13 +9,13 @@
 Vector *tokens;
 int col, line;
 
-void push_token(int type, int val, char *ident)
+void push_token(int type, int val, char *str)
 {
 	Token *t = malloc(sizeof(Token));
 
 	t->type = type;
 	t->val = val;
-	t->ident = ident;
+	t->str = str;
 	t->col = col;
 	t->line = line;
 
@@ -41,6 +41,17 @@ void push_ident(char *p, char *e)
 	ident[len] = 0;
 
 	push_token(TK_IDENT, 0, ident);
+}
+
+void push_string(char *p, char *e)
+{
+	int len = e - p;
+	char *str = malloc(len + 1);
+
+	memcpy(str, p, len);
+	str[len] = 0;
+
+	push_token(TK_STRING, 0, str);
 }
 
 int pos;
@@ -90,6 +101,15 @@ void tokenize(char *p)
 		if (*p == '!' && *(p + 1) == '=') {
 			push_char(TK_NE);
 			p += 2;
+			continue;
+		}
+		if (*p == '"') {
+			p++; // remove first '"'
+			char *str = p;
+			while (*p != '"')
+				p++;
+			push_string(str, p);
+			p++; // remove last '"'
 			continue;
 		}
 		if (*p == '+' || *p == '-' ||

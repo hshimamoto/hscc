@@ -3,6 +3,7 @@
 
 enum {
 	TK_NUM = 256,
+	TK_STRING,
 	TK_IDENT,
 	TK_EQ,		// ==
 	TK_NE,		// !=
@@ -12,7 +13,7 @@ enum {
 typedef struct {
 	int type;
 	int val;
-	char *ident;
+	char *str;	// string or ident
 	int col, line;
 } Token;
 
