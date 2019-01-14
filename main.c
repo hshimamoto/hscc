@@ -113,10 +113,10 @@ Node *new_call(char *name, Vector *params)
  * call      : indent "(" params ")"
  * params    : e | ident "," params
  */
-Node *prog();
-Node *expr();
+Node *prog(void);
+Node *expr(void);
 
-Vector *params()
+Vector *params(void)
 {
 	Token *t = get_token();
 
@@ -141,7 +141,7 @@ Vector *params()
 	}
 }
 
-Node *num_or_ident()
+Node *num_or_ident(void)
 {
 	Token *t = get_token();
 
@@ -162,7 +162,7 @@ Node *num_or_ident()
 	exit(1);
 }
 
-Node *term()
+Node *term(void)
 {
 	Token *t = get_token();
 
@@ -183,7 +183,7 @@ Node *term()
 	return num_or_ident();
 }
 
-Node *mul()
+Node *mul(void)
 {
 	Node *lhs = term();
 
@@ -199,7 +199,7 @@ Node *mul()
 	}
 }
 
-Node *expr_plus()
+Node *expr_plus(void)
 {
 	Node *lhs = mul();
 
@@ -215,7 +215,7 @@ Node *expr_plus()
 	}
 }
 
-Node *expr_cmp()
+Node *expr_cmp(void)
 {
 	Node *lhs = expr_plus();
 
@@ -233,7 +233,7 @@ Node *expr_cmp()
 	}
 }
 
-Node *expr_and()
+Node *expr_and(void)
 {
 	Node *lhs = expr_cmp();
 
@@ -249,7 +249,7 @@ Node *expr_and()
 	}
 }
 
-Node *expr_xor()
+Node *expr_xor(void)
 {
 	Node *lhs = expr_and();
 
@@ -265,7 +265,7 @@ Node *expr_xor()
 	}
 }
 
-Node *expr()
+Node *expr(void)
 {
 	Node *lhs = expr_xor();
 
@@ -281,7 +281,7 @@ Node *expr()
 	}
 }
 
-Node *assign2()
+Node *assign2(void)
 {
 	Token *t = get_token();
 
@@ -304,7 +304,7 @@ Node *assign2()
 	exit(1);
 }
 
-Node *assign()
+Node *assign(void)
 {
 	Node *lhs = expr();
 	Node *rhs = assign2();
@@ -315,7 +315,7 @@ Node *assign()
 	return new_node('=', lhs, rhs, 0);
 }
 
-Node *declare()
+Node *declare(void)
 {
 	int save = save_token();
 	Token *ident = get_token();
@@ -346,7 +346,7 @@ err:
 	return assign();
 }
 
-Node *prog()
+Node *prog(void)
 {
 	Node *lhs = declare();
 
