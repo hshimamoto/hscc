@@ -67,4 +67,6 @@ try 'f(a,b,c){a*b+c;} main(){A=8;B=5;C=2;f(A,B,C);}' 42
 try 'f(a,b,c){a*b+c;} main(){A=2;B=8;C=5;f(B,C,A);}' 42
 try 'f(a,b,c,d,e,f){a+b+c+d+e+f;} main(){A=5;B=10;C=15;f(A,B,C, A,B,C);}' 60
 
+try 'main() {s0="Hello";s1="world";strcmp(s0,s1) != 0;}' 1
+
 echo OK

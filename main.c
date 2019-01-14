@@ -8,6 +8,7 @@
 
 enum {
 	ND_NUM = 256,
+	ND_STRING,
 	ND_IDENT,
 	ND_BINOP,	// binary operation
 	ND_EQ,
@@ -23,6 +24,7 @@ typedef struct node {
 	struct node *lhs, *rhs;
 	int optype;	// for ND_BINOP
 	int val;	// for ND_NUM
+	char *str;	// for ND_STRING
 	char *name;	// for ND_DECFUNC
 	int offset;	// local variable offset for ND_INDENT
 	Map *vars;	// variables for DECFUNC
@@ -52,6 +54,19 @@ Node *new_ident(char *name)
 	node->rhs = NULL;
 	node->val = 0;
 	node->name = name;
+
+	return node;
+}
+
+Node *new_string(char *str)
+{
+	Node *node = malloc(sizeof(Node));
+
+	node->type = ND_STRING;
+	node->lhs = NULL;
+	node->rhs = NULL;
+	node->val = 0;
+	node->str = str;
 
 	return node;
 }
@@ -143,6 +158,9 @@ Node *num_or_ident(void)
 
 	if (t->type == TK_NUM) {
 		return new_node(ND_NUM, NULL, NULL, t->val);
+	}
+	if (t->type == TK_STRING) {
+		return new_string(t->str);
 	}
 	if (t->type == TK_IDENT) {
 		char *name = t->str;
@@ -438,6 +456,11 @@ void analyze(Node *node, int depth)
 		node->reg = reg_alloc();
 		return;
 	}
+	if (node->type == ND_STRING) {
+		// allocate reg
+		node->reg = reg_alloc();
+		return;
+	}
 	if (node->type == ND_IDENT) {
 		// local variables
 		Variable *var = map_get(variables, node->name);
@@ -485,6 +508,14 @@ void analyze(Node *node, int depth)
 		analyze(node->lhs, depth + 1);
 	if (node->rhs)
 		analyze(node->rhs, depth + 1);
+}
+
+void emit_p(char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	printf("\n");
 }
 
 void emit(char *fmt, ...)
@@ -568,6 +599,16 @@ void gen(Node *node)
 	}
 	if (node->type == ND_NUM) {
 		emit("mov %s, %d", regname[node->reg], node->val);
+		return;
+	}
+	if (node->type == ND_STRING) {
+		static int strcnt = 0;
+		emit_p(".data");
+		emit_p("Lstr%d:", strcnt);
+		emit(".asciz \"%s\"", node->str);
+		emit_p(".text");
+		emit("lea %s, [rip + Lstr%d]", regname[node->reg], strcnt);
+		strcnt++;
 		return;
 	}
 	if (node->type == ND_IDENT) {
@@ -682,7 +723,8 @@ int main(int argc, char **argv)
 
 	Node *code = prog();
 	analyze(code, 0);
-	puts(".intel_syntax noprefix");
+	emit_p(".intel_syntax noprefix");
+	emit_p(".text");
 	gen(code);
 
 	return 0;
