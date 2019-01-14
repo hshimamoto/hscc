@@ -553,20 +553,6 @@ void gen_restoreregs(Node *node)
 	}
 }
 
-void gen_lval(Node *node)
-{
-	if (node->type == ND_IDENT) {
-		// rbp - N * 8
-		emit("#[%s]", node->name);
-		emit("mov rax, rbp");
-		emit("sub rax, %d", node->offset + 8);
-		return;
-	}
-
-	fprintf(stderr, "not lval\n");
-	exit(1);
-}
-
 void gen(Node *node)
 {
 	if (node->type == ND_DECFUNC) {
@@ -612,8 +598,7 @@ void gen(Node *node)
 		return;
 	}
 	if (node->type == ND_IDENT) {
-		gen_lval(node);
-		emit("mov %s, [rax]", regname[node->reg]);
+		emit("mov %s, [rbp-%d]", regname[node->reg], node->offset + 8);
 		return;
 	}
 	if (node->type == ND_CALL) {
@@ -632,8 +617,11 @@ void gen(Node *node)
 	}
 	if (node->type == '=') {
 		gen(node->rhs);
-		gen_lval(node->lhs);
-		emit("mov [rax], %s", regname[node->reg]);
+		if (node->lhs->type != ND_IDENT) {
+			fprintf(stderr, "not lval\n");
+			exit(1);
+		}
+		emit("mov [rbp-%d], %s", node->lhs->offset + 8, regname[node->reg]);
 		return;
 	}
 
