@@ -118,12 +118,8 @@ Node *expr(void);
 
 Vector *params(void)
 {
-	Token *t = get_token();
-
-	if (t->type == ')')
-		return NULL;
-
 	Vector *p = new_vector();
+	Token *t = get_token();
 
 	for (;;) {
 		if (t->type == TK_IDENT) {
@@ -404,15 +400,13 @@ void analyze(Node *node, int depth)
 		variables = node->vars;
 
 		// map params to local variables
-		if (node->params) {
-			Vector *p = node->params;
-			for (int i = 0; i < p->len; i++) {
-				Variable *var = malloc(sizeof(Variable));
+		Vector *p = node->params;
+		for (int i = 0; i < p->len; i++) {
+			Variable *var = malloc(sizeof(Variable));
 
-				var->name = p->data[i];
-				var->offset = (variables->keys->len) * 8;
-				map_set(variables, var->name, var);
-			}
+			var->name = p->data[i];
+			var->offset = (variables->keys->len) * 8;
+			map_set(variables, var->name, var);
 		}
 		analyze(node->lhs, depth + 1);
 
@@ -548,30 +542,28 @@ void gen(Node *node)
 		if (node->vars->keys->len > 0)
 			emit("sub rsp, %d", (8 * node->vars->keys->len) + 8);
 		// parameters
-		if (node->params) {
-			Vector *p = node->params;
-			emit("# params %d", p->len);
-			Variable *var = NULL;
-			if (p->len > 0) {
-				var = map_get(node->vars, p->data[0]);
-				emit("# rdi [%s] offset %d", var->name, var->offset);
-				emit("mov [rbp-%d], rdi", var->offset + 8);
-			}
-			if (p->len > 1) {
-				var = map_get(node->vars, p->data[1]);
-				emit("# rsi [%s] offset %d", var->name, var->offset);
-				emit("mov [rbp-%d], rsi", var->offset + 8);
-			}
-			if (p->len > 2) {
-				var = map_get(node->vars, p->data[2]);
-				emit("# rdx [%s] offset %d", var->name, var->offset);
-				emit("mov [rbp-%d], rdx", var->offset + 8);
-			}
-			if (p->len > 3) {
-				var = map_get(node->vars, p->data[3]);
-				emit("# rcx [%s] offset %d", var->name, var->offset);
-				emit("mov [rbp-%d], rcx", var->offset + 8);
-			}
+		Vector *p = node->params;
+		emit("# params %d", p->len);
+		Variable *var = NULL;
+		if (p->len > 0) {
+			var = map_get(node->vars, p->data[0]);
+			emit("# rdi [%s] offset %d", var->name, var->offset);
+			emit("mov [rbp-%d], rdi", var->offset + 8);
+		}
+		if (p->len > 1) {
+			var = map_get(node->vars, p->data[1]);
+			emit("# rsi [%s] offset %d", var->name, var->offset);
+			emit("mov [rbp-%d], rsi", var->offset + 8);
+		}
+		if (p->len > 2) {
+			var = map_get(node->vars, p->data[2]);
+			emit("# rdx [%s] offset %d", var->name, var->offset);
+			emit("mov [rbp-%d], rdx", var->offset + 8);
+		}
+		if (p->len > 3) {
+			var = map_get(node->vars, p->data[3]);
+			emit("# rcx [%s] offset %d", var->name, var->offset);
+			emit("mov [rbp-%d], rcx", var->offset + 8);
 		}
 		// set variables
 		variables = node->vars;
@@ -598,30 +590,28 @@ void gen(Node *node)
 	}
 	if (node->type == ND_CALL) {
 		gen_saveregs(node);
-		if (node->params) {
-			Vector *p = node->params;
-			emit("# params %d", p->len);
-			Variable *var = NULL;
-			if (p->len > 0) {
-				var = map_get(variables, p->data[0]);
-				emit("# rdi [%s] offset %d", var->name, var->offset);
-				emit("mov rdi, [rbp-%d]", var->offset + 8);
-			}
-			if (p->len > 1) {
-				var = map_get(variables, p->data[1]);
-				emit("# rsi [%s] offset %d", var->name, var->offset);
-				emit("mov rsi, [rbp-%d]", var->offset + 8);
-			}
-			if (p->len > 2) {
-				var = map_get(variables, p->data[2]);
-				emit("# rdx [%s] offset %d", var->name, var->offset);
-				emit("mov rdx, [rbp-%d]", var->offset + 8);
-			}
-			if (p->len > 3) {
-				var = map_get(variables, p->data[3]);
-				emit("# rcx [%s] offset %d", var->name, var->offset);
-				emit("mov rcx, [rbp-%d]", var->offset + 8);
-			}
+		Vector *p = node->params;
+		emit("# params %d", p->len);
+		Variable *var = NULL;
+		if (p->len > 0) {
+			var = map_get(variables, p->data[0]);
+			emit("# rdi [%s] offset %d", var->name, var->offset);
+			emit("mov rdi, [rbp-%d]", var->offset + 8);
+		}
+		if (p->len > 1) {
+			var = map_get(variables, p->data[1]);
+			emit("# rsi [%s] offset %d", var->name, var->offset);
+			emit("mov rsi, [rbp-%d]", var->offset + 8);
+		}
+		if (p->len > 2) {
+			var = map_get(variables, p->data[2]);
+			emit("# rdx [%s] offset %d", var->name, var->offset);
+			emit("mov rdx, [rbp-%d]", var->offset + 8);
+		}
+		if (p->len > 3) {
+			var = map_get(variables, p->data[3]);
+			emit("# rcx [%s] offset %d", var->name, var->offset);
+			emit("mov rcx, [rbp-%d]", var->offset + 8);
 		}
 		emit("call %s", node->name);
 		gen_restoreregs(node);
