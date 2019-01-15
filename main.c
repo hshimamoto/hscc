@@ -22,6 +22,7 @@ enum {
 typedef struct node {
 	int type;
 	struct node *lhs, *rhs;
+	Token *token;
 	int optype;	// for ND_BINOP
 	int val;	// for ND_NUM
 	char *str;	// for ND_STRING
@@ -33,78 +34,68 @@ typedef struct node {
 	Vector *params;	// params for ND_DECFUNC and ND_CALL
 } Node;
 
-Node *new_node(int type, Node *lhs, Node *rhs, int val)
+Node *new_node(int type, Node *lhs, Node *rhs, Token *token)
 {
 	Node *node = malloc(sizeof(Node));
 
 	node->type = type;
 	node->lhs = lhs;
 	node->rhs = rhs;
-	node->val = val;
+	node->token = token;
 
 	return node;
 }
 
-Node *new_ident(char *name)
+Node *new_num(int num, Token *token)
 {
-	Node *node = malloc(sizeof(Node));
+	Node *node = new_node(ND_NUM, NULL, NULL, token);
 
-	node->type = ND_IDENT;
-	node->lhs = NULL;
-	node->rhs = NULL;
-	node->val = 0;
+	node->val = num;
+
+	return node;
+}
+
+Node *new_ident(char *name, Token *token)
+{
+	Node *node = new_node(ND_IDENT, NULL, NULL, token);
+
 	node->name = name;
 
 	return node;
 }
 
-Node *new_string(char *str)
+Node *new_string(char *str, Token *token)
 {
-	Node *node = malloc(sizeof(Node));
+	Node *node = new_node(ND_STRING, NULL, NULL, token);
 
-	node->type = ND_STRING;
-	node->lhs = NULL;
-	node->rhs = NULL;
-	node->val = 0;
 	node->str = str;
 
 	return node;
 }
 
-Node *new_binop(int optype, Node *lhs, Node *rhs)
+Node *new_binop(int optype, Node *lhs, Node *rhs, Token *token)
 {
-	Node *node = malloc(sizeof(Node));
+	Node *node = new_node(ND_BINOP, lhs, rhs, token);
 
-	node->type = ND_BINOP;
-	node->lhs = lhs;
-	node->rhs = rhs;
 	node->optype = optype;
 
 	return node;
 }
 
-Node *new_decfunc(Node *child, char *name, Vector *params)
+Node *new_decfunc(Node *child, char *name, Vector *params, Token *token)
 {
-	Node *node = malloc(sizeof(Node));
+	Node *node = new_node(ND_DECFUNC, child, NULL, token);
 
-	node->type = ND_DECFUNC;
-	node->lhs = child;
-	node->rhs = NULL;
-	node->val = 0;
 	node->name = name;
 	node->params = params;
 
 	return node;
 }
 
-Node *new_call(char *name, Vector *params)
+Node *new_call(char *name, Vector *params, Token *token)
 {
-	Node *node = malloc(sizeof(Node));
+	Node *node = new_node(ND_CALL, NULL, NULL, token);
 
-	node->type = ND_CALL;
-	node->lhs = NULL;
-	node->rhs = NULL;
-	node->val = 0;
 	node->name = name;
 	node->params = params;
 
@@ -157,19 +148,20 @@ Node *num_or_ident(void)
 	Token *t = get_token();
 
 	if (t->type == TK_NUM) {
-		return new_node(ND_NUM, NULL, NULL, t->val);
+		return new_num(t->val, t);
 	}
 	if (t->type == TK_STRING) {
-		return new_string(t->str);
+		return new_string(t->str, t);
 	}
 	if (t->type == TK_IDENT) {
+		Token *curr = t;
 		char *name = t->str;
 
 		t = get_token();
 		if (t->type == '(')
-			return new_call(name, params());
+			return new_call(name, params(), curr);
 		unget_token();
-		return new_ident(name);
+		return new_ident(name, curr);
 	}
 	// syntax error
 	fprintf(stderr, "syntax error, expected num_or_ident but %d\n", t->type);
@@ -205,7 +197,7 @@ Node *mul(void)
 		Token *t = get_token();
 
 		if (t->type == '*' || t->type == '/') {
-			lhs = new_binop(t->type, lhs, term());
+			lhs = new_binop(t->type, lhs, term(), t);
 		} else {
 			unget_token();
 			return lhs;
@@ -221,7 +213,7 @@ Node *expr_plus(void)
 		Token *t = get_token();
 
 		if (t->type == '+' || t->type == '-') {
-			lhs = new_binop(t->type, lhs, mul());
+			lhs = new_binop(t->type, lhs, mul(), t);
 		} else {
 			unget_token();
 			return lhs;
@@ -237,9 +229,9 @@ Node *expr_cmp(void)
 		Token *t = get_token();
 
 		if (t->type == TK_EQ) {
-			lhs = new_node(ND_EQ, lhs, expr_plus(), 0);
+			lhs = new_node(ND_EQ, lhs, expr_plus(), t);
 		} else if (t->type == TK_NE) {
-			lhs = new_node(ND_NE, lhs, expr_plus(), 0);
+			lhs = new_node(ND_NE, lhs, expr_plus(), t);
 		} else {
 			unget_token();
 			return lhs;
@@ -255,7 +247,7 @@ Node *expr_and(void)
 		Token *t = get_token();
 
 		if (t->type == '&') {
-			lhs = new_binop('&', lhs, expr_cmp());
+			lhs = new_binop('&', lhs, expr_cmp(), t);
 		} else {
 			unget_token();
 			return lhs;
@@ -271,7 +263,7 @@ Node *expr_xor(void)
 		Token *t = get_token();
 
 		if (t->type == '^') {
-			lhs = new_binop('^', lhs, expr_and());
+			lhs = new_binop('^', lhs, expr_and(), t);
 		} else {
 			unget_token();
 			return lhs;
@@ -287,7 +279,7 @@ Node *expr(void)
 		Token *t = get_token();
 
 		if (t->type == '|') {
-			lhs = new_binop('|', lhs, expr_xor());
+			lhs = new_binop('|', lhs, expr_xor(), t);
 		} else {
 			unget_token();
 			return lhs;
@@ -310,7 +302,7 @@ Node *assign2(void)
 		if (rhs == NULL)
 			return lhs;
 
-		return new_node('=', lhs, rhs, 0);
+		return new_node('=', lhs, rhs, t);
 	}
 
 	// bad
@@ -326,7 +318,7 @@ Node *assign(void)
 	if (rhs == NULL)
 		return lhs;
 
-	return new_node('=', lhs, rhs, 0);
+	return new_node('=', lhs, rhs, NULL);
 }
 
 Node *declare(void)
@@ -354,7 +346,7 @@ Node *declare(void)
 	if (t->type != '}')
 		goto err;
 
-	return new_decfunc(node, ident->str, p);
+	return new_decfunc(node, ident->str, p, ident);
 err:
 	restore_token(save);
 	return assign();
@@ -375,7 +367,7 @@ Node *prog(void)
 		}
 
 		unget_token();
-		lhs = new_node(ND_STATEMENT, lhs, declare(), 0);
+		lhs = new_node(ND_STATEMENT, lhs, declare(), NULL);
 	}
 }
 
