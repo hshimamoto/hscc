@@ -15,6 +15,7 @@ enum {
 	ND_NE,
 	ND_STATEMENT,
 	ND_DECFUNC,
+	ND_DECVAR,
 	ND_CALL,
 	ND_PARAMS,	// parameters
 };
@@ -92,6 +93,15 @@ Node *new_decfunc(Node *child, char *name, Vector *params, Token *token)
 	return node;
 }
 
+Node *new_decvar(char *name, Token *token)
+{
+	Node *node = new_node(ND_DECVAR, NULL, NULL, token);
+
+	node->name = name;
+
+	return node;
+}
+
 Node *new_call(char *name, Vector *params, Token *token)
 {
 	Node *node = new_node(ND_CALL, NULL, NULL, token);
@@ -105,8 +115,9 @@ Node *new_call(char *name, Vector *params, Token *token)
 /*
  * prog      : declare prog2
  * prog2     : e | prog
- * declare   : decfunc | assign
- * decfunc   : ident "(" ")" "{" prog "}"
+ * declare   : decfunc | decvar | assign
+ * decfunc   : "int" ident "(" ")" "{" prog "}"
+ * decvar    : "int" ident ";"
  * assign    : expr assign2 ";"
  * assing2   : e | "=" expr assign2
  * expr      : expr_xor | expr "|" expr_xor
@@ -329,8 +340,20 @@ Node *declare(void)
 	if (ident->type != TK_IDENT)
 		goto err;
 
+	// check type "int"
+	if (strcmp(ident->str, "int"))
+		goto err;
+
+	// get variable name
+	ident = get_token();
+	if (ident->type != TK_IDENT)
+		goto err;
+
 	Token *t = get_token();
-	if (t->type != '(')
+	if (t->type == ';') {
+		// declare variable
+		return new_decvar(ident->str, ident);
+	} else if (t->type != '(')
 		goto err;
 
 	Vector *p = params();
@@ -568,6 +591,10 @@ void gen(Node *node)
 		emit("mov rsp, rbp");
 		emit("pop rbp");
 		emit("ret");
+		return;
+	}
+	if (node->type == ND_DECVAR) {
+		emit("#decvar %s", node->name);
 		return;
 	}
 	if (node->type == ND_STATEMENT) {
