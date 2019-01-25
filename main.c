@@ -332,6 +332,51 @@ Node *assign(void)
 	return new_node('=', lhs, rhs, NULL);
 }
 
+Node *declare_var(void)
+{
+	int save = save_token();
+	Token *ident = get_token();
+
+	if (ident->type != TK_IDENT)
+		goto err;
+
+	// check type "int"
+	if (strcmp(ident->str, "int"))
+		goto err;
+
+	// get variable name
+	ident = get_token();
+	if (ident->type != TK_IDENT)
+		goto err;
+
+	return new_decvar(ident->str, ident);
+err:
+	restore_token(save);
+	return NULL;
+}
+
+Vector *declare_params(void)
+{
+	Vector *p = new_vector();
+
+	for (;;) {
+		Node *param = declare_var();
+
+		if (param == NULL)
+			return p;
+
+		vec_push(p, param);
+
+		Token *t = get_token();
+		if (t->type == ',')
+			continue;
+
+		unget_token();
+
+		return p;
+	}
+}
+
 Node *declare(void)
 {
 	int save = save_token();
@@ -356,7 +401,11 @@ Node *declare(void)
 	} else if (t->type != '(')
 		goto err;
 
-	Vector *p = params();
+	Vector *p = declare_params();
+
+	t = get_token();
+	if (t->type != ')')
+		goto err;
 
 	t = get_token();
 	if (t->type != '{')
@@ -440,7 +489,8 @@ void analyze(Node *node, int depth)
 		for (int i = 0; i < p->len; i++) {
 			Variable *var = malloc(sizeof(Variable));
 
-			var->name = p->data[i];
+			Node *node = p->data[i]; // must be ND_DECVAR
+			var->name = node->name;
 			var->offset = (variables->keys->len) * 8;
 			map_set(variables, var->name, var);
 		}
@@ -580,7 +630,8 @@ void gen(Node *node)
 		Vector *p = node->params;
 		emit("# params %d", p->len);
 		for (int i = 0; i < p->len; i++) {
-			Variable *var = map_get(node->vars, p->data[i]);
+			Node *decvar = p->data[i];
+			Variable *var = map_get(node->vars, decvar->name);
 			emit("# %s [%s] offset %d", regargs[i], var->name, var->offset);
 			emit("mov [rbp-%d], %s", var->offset + 8, regargs[i]);
 		}
