@@ -29,10 +29,11 @@ typedef struct node {
 	char *str;	// for ND_STRING
 	char *name;	// for ND_DECFUNC
 	int offset;	// local variable offset for ND_INDENT
-	Map *vars;	// variables for DECFUNC
 	int reg;	// allocated register
 	int regs;	// save registers on call for ND_CALL
 	Vector *params;	// params for ND_DECFUNC and ND_CALL
+	// local variables for ND_DECFUNC
+	Map *vars;
 } Node;
 
 Node *new_node(int type, Node *lhs, Node *rhs, Token *token)
@@ -448,6 +449,7 @@ typedef struct {
 	int offset;
 } Variable;
 
+Node *curr_block;
 Map *variables;
 int regs; // rdi, rsi, rcx, r8, r9, r10, r11
 char *regname[7] = {
@@ -495,6 +497,7 @@ void analyze(Node *node, int depth)
 {
 	if (node->type == ND_DECFUNC) {
 		// setup
+		Node *prev_block = curr_block;
 		Map *prev_vars = variables;
 		node->vars = new_map();
 		variables = node->vars;
@@ -509,6 +512,7 @@ void analyze(Node *node, int depth)
 
 		// restore
 		variables = prev_vars;
+		curr_block = prev_block;
 		return;
 	}
 	if (node->type == ND_STATEMENT) {
@@ -648,13 +652,19 @@ void gen(Node *node)
 			emit("# %s [%s] offset %d", regargs[i], var->name, var->offset);
 			emit("mov [rbp-%d], %s", var->offset + 8, regargs[i]);
 		}
-		// set variables
+		// setup
+		Node *prev_block = curr_block;
+		Map *prev_vars = variables;
+		curr_block = node;
 		variables = node->vars;
 		gen(node->lhs);
 		emit("mov rax, %s", regname[node->lhs->reg]);
 		emit("mov rsp, rbp");
 		emit("pop rbp");
 		emit("ret");
+		// restore
+		curr_block = prev_block;
+		variables = prev_vars;
 		return;
 	}
 	if (node->type == ND_DECVAR) {
