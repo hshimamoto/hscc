@@ -476,6 +476,21 @@ void reg_free(int r)
 	regs &= ~b;
 }
 
+void analyze_add_localvar(Node *node, char *name)
+{
+	Variable *var = map_get(variables, name);
+
+	if (var) {
+		fprintf(stderr, "duplicate variable %s (%d:%d)\n", name,
+				node->token->line, node->token->col);
+		exit(1);
+	}
+	var = malloc(sizeof(Variable));
+	var->name = name;
+	var->offset = (variables->keys->len) * 8;
+	map_set(variables, name, var);
+}
+
 void analyze(Node *node, int depth)
 {
 	if (node->type == ND_DECFUNC) {
@@ -487,12 +502,8 @@ void analyze(Node *node, int depth)
 		// map params to local variables
 		Vector *p = node->params;
 		for (int i = 0; i < p->len; i++) {
-			Variable *var = malloc(sizeof(Variable));
-
 			Node *node = p->data[i]; // must be ND_DECVAR
-			var->name = node->name;
-			var->offset = (variables->keys->len) * 8;
-			map_set(variables, var->name, var);
+			analyze_add_localvar(node, node->name);
 		}
 		analyze(node->lhs, depth + 1);
 
@@ -516,6 +527,10 @@ void analyze(Node *node, int depth)
 
 		return;
 	}
+	if (node->type== ND_DECVAR) {
+		analyze_add_localvar(node, node->name);
+		return;
+	}
 	if (node->type == ND_NUM) {
 		// allocate reg
 		node->reg = reg_alloc();
@@ -531,11 +546,9 @@ void analyze(Node *node, int depth)
 		Variable *var = map_get(variables, node->name);
 
 		if (!var) {
-			// new variable
-			var = malloc(sizeof(Variable));
-			var->name = node->name;
-			var->offset = (variables->keys->len) * 8;
-			map_set(variables, node->name, var);
+			fprintf(stderr, "unkown variable %s (%d:%d)\n",
+					node->name, node->token->line, node->token->col);
+			exit(1);
 		}
 		node->offset = var->offset;
 		// allocate reg
