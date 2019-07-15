@@ -444,7 +444,18 @@ Node *prog(void)
 	}
 }
 
+enum {
+	TYPE_PTR = 0,
+	TYPE_INT,
+};
+
+typedef struct Type {
+	int type;
+	struct Type *ptrof;
+} Type;
+
 typedef struct {
+	Type type;
 	char *name;
 	int offset;
 } Variable;
@@ -488,6 +499,8 @@ void analyze_add_localvar(Node *node, char *name)
 		exit(1);
 	}
 	var = malloc(sizeof(Variable));
+	var->type.type = TYPE_INT;
+	var->type.ptrof = NULL;
 	var->name = name;
 	var->offset = (variables->keys->len) * 8;
 	map_set(variables, name, var);
